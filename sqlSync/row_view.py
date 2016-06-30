@@ -16,7 +16,7 @@ import time
 import sys
 import argparse
 
-from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
+#from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
 Base = declarative_base()
 
@@ -27,7 +27,7 @@ Base = declarative_base()
 meta = MetaData()
 #sql_sync_connection = sql_sync_engine.connect()
 
-class RowView:
+class SqlSync:
 
     def __init__(self, schema_name):
         self.schema_name = schema_name

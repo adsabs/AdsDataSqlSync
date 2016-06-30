@@ -15,7 +15,8 @@ import time
 import sys
 import argparse
 
-import row_view
+sys.path.append('../sqlSync')
+from row_view import SqlSync
 
 from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
@@ -166,7 +167,7 @@ class Metrics():
         return first
 
     def update_metrics_changed(self, row_view_schema='ingest'):
-        sql_sync = RowView(row_view_schema)
+        sql_sync = SqlSync(row_view_schema)
         row_view = sql_sync.get_changed_rows_table('changedrowsm', 'public')
         connection = sql_sync_engine.connect()
         s = select(['row_view'])
@@ -179,7 +180,7 @@ class Metrics():
     # paper from 1988: 1988PASP..100.1134B
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
-        sql_sync = RowView(row_view_schema)
+        sql_sync = SqlSync(row_view_schema)
         row_view = sql_sync.read_row_view(bibcode)
         print row_view
         print row_view['bibcode']
@@ -193,7 +194,7 @@ class Metrics():
         count = 0
         offset =  0
         max_count = 11500000
-        sql_sync = RowView(row_view_schema)
+        sql_sync = SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
         while count < max_count:
             s = select([table])
@@ -402,7 +403,7 @@ if __name__ == "__main__":
         print 'saving delta not imlemented'
     elif args.command == 'metricsCompute':
         m = Metrics(args.metricsSchema)
-        m.update_metrics_all()
+        m.update_metrics_all(args.rowViewSchema)
     elif args.command == 'metricsCompare' and args.bibcode:
         metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
         metrics2 = Metrics(args.metricsSchema, METRICS_DATABASE2)
