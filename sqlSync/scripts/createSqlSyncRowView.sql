@@ -1,7 +1,9 @@
 
-drop materialized view if exists ingesttest.RowViewM;
 
-    CREATE MATERIALIZED VIEW ingesttest.RowViewM AS
+    drop materialized view if exists :v1.RowViewM;
+
+
+    CREATE MATERIALIZED VIEW :v1.RowViewM AS
          select bibcode,
               coalesce(authors, ARRAY[]::text[]) as authors,
               coalesce(refereed, FALSE) as refereed,
@@ -16,9 +18,9 @@ drop materialized view if exists ingesttest.RowViewM;
               coalesce(downloads, ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) as downloads,
               coalesce(reference, ARRAY[]::text[]) as reference,
               coalesce(reads, ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) as reads
-       from ingesttest.Canonical natural left join ingesttest.Author natural left join ingesttest.Refereed
-       natural left join ingesttest.Simbad natural left join ingesttest.Grants natural left join ingesttest.Citation
-       natural left join ingesttest.Relevance natural left join ingesttest.Reader
-       natural left join ingesttest.Download natural left join ingesttest.Reads natural left join ingesttest.Reference;
+       from :v1.Canonical natural left join :v1.Author natural left join :v1.Refereed
+       natural left join :v1.Simbad natural left join :v1.Grants natural left join :v1.Citation
+       natural left join :v1.Relevance natural left join :v1.Reader
+       natural left join :v1.Download natural left join :v1.Reads natural left join :v1.Reference;
 
-       create index on ingesttest.RowViewM (bibcode);
+     create index on :v1.RowViewM (bibcode);

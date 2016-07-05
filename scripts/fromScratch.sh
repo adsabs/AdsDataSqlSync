@@ -11,7 +11,7 @@ psql -h localhost -U postgres -v v1=$1 -f ../sqlSync/scripts/createSqlSyncTables
 psql -h localhost -U postgres -v v1=$1 -f ../sqlSync/scripts/loadColumnFiles.sql
 
 # create row view
-psql -h localhost -U postgres -f ../sqlSync/scripts/createSqlSyncRowView.sql
+psql -h localhost -U postgres -v v1=$1 -f ../sqlSync/scripts/createSqlSyncRowView.sql
 
 psql -h localhost -U postgres -v v1=$2 -f ../metrics/scripts/createMetricsTable.sql
 
