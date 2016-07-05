@@ -145,7 +145,7 @@ class SqlSync:
                      extend_existing=True)
 
 
-    def read_row_view(self, bibcode):
+    def get_row_view(self, bibcode):
         # connection = sql_sync_engine.connect()
         row_view_select = select([self.row_view_table]).where(self.row_view_table.c.bibcode == bibcode)
         row_view_result = self.sql_sync_connection.execute(row_view_select)

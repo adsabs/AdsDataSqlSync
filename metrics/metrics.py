@@ -101,10 +101,12 @@ class Metrics():
 
         self.tmp_count += 1
         if (self.tmp_count % 100) != 0:
-            self.tmp_update_buffer.append(values_dict)
-            return
+            self.flush()
+            self.tmp_count = 0
+            #self.tmp_update_buffer.append(values_dict)
+   
 
-        self.flush()
+
 
     def flush(self):
 
@@ -152,13 +154,14 @@ class Metrics():
             #result = metrics_connection.execute([updater])
         if len(inserts):
             result = self.connection.execute(self.table.insert(), inserts)
+
             #print 'inserts incomplete!', len(self.inserts)
             #inserter = self.table.insert(values_dict)
             #result = metrics_connection.execute(inserter)
         self.inserts = []
         self.updates = []
         self.upserts = []
-        self.tmp_count = 0
+
         
     def read(self, bibcode):
         s = select([self.table]).where(self.table.c.bibcode == bibcode)
@@ -181,7 +184,7 @@ class Metrics():
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
         sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.read_row_view(bibcode)
+        row_view = sql_sync.get_row_view(bibcode)
         print row_view
         print row_view['bibcode']
         metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
@@ -193,16 +196,15 @@ class Metrics():
         step_size = 1000
         count = 0
         offset =  0
-        max_count = 11500000
         sql_sync = SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
-        while count < max_count:
+        while True:
             s = select([table])
             s = s.limit(step_size).offset(offset).order_by('bibcode')
             print 'getting data...', count, offset
             connection = sql_sync.sql_sync_engine.connect()
             results = connection.execute(s)
-            print 'received data'
+            print 'received data: ', results.rowcount
             for row_view in results:
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
@@ -210,9 +212,14 @@ class Metrics():
                     print row_view.bibcode
                 count += 1
 
+            if results.rowcount < step_size:
+                # here if last read got the last chunk of data
+                self.flush()
+                end_time = time.time()
+                print 'done:', end_time - start_time
+                return;
+
             offset += step_size
-        end_time = time.time()
-        print 'done:', end_time - start_time
 
     # normalized citations:
     #  for a list of N papers (the citations?)
@@ -242,10 +249,7 @@ class Metrics():
         refereed_citations = []
         total_normalized_citations = 0.0
         if citations:
-            #q = 'select refereed,array_length(reference,1),bibcode from ingest.RowViewM where bibcode = ANY ((select citations from ingest.RowViewM where bibcode=%s)::text[]);'
-            # the following is another option, but speed is roughly the same
-            q = 'select refereed,array_length(reference,1),bibcode from ingest.RowViewM where bibcode in (select unnest(citations) from ingest.RowViewM where bibcode=%s);'
-
+            q = 'select refereed,array_length(reference,1),bibcode from ' + sql_sync.schema_name + '.RowViewM where bibcode in (select unnest(citations) from ' + sql_sync.schema_name + '.RowViewM where bibcode=%s);'
             result = sql_sync.sql_sync_connection.execute(q,bibcode)
             for row in result:
                 citation_refereed = row[0] if row[0] else False
@@ -274,7 +278,7 @@ class Metrics():
         metrics_dict['rn_citations'] = normalized_reference     # total_normalized_citations  
         metrics_dict['rn_citation_data'] = citations_json_records
         # metrics_dict['rn_citations_hist'] = citations_histogram
-
+        
         return metrics_dict
 
     @staticmethod
@@ -399,11 +403,15 @@ if __name__ == "__main__":
         m = Metrics(args.metricsSchema)
         m.update_metrics_test(args.bibcode, args.rowViewSchema)
         print 'metrics bibcode computed for', args.bibcode
+
     elif args.command == 'metricsCompute' and args.delta:
         print 'saving delta not imlemented'
+
     elif args.command == 'metricsCompute':
+        print 'doing update_metrics_all with sql sync schema', args.rowViewSchema
         m = Metrics(args.metricsSchema)
         m.update_metrics_all(args.rowViewSchema)
+
     elif args.command == 'metricsCompare' and args.bibcode:
         metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
         metrics2 = Metrics(args.metricsSchema, METRICS_DATABASE2)
