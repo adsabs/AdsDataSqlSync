@@ -295,7 +295,7 @@ class Metrics():
                   'an_refereed_citations')
         for field in fields:
             if Metrics.field_mismatch(field, m1, m2): 
-                print field, m1[field], m2[field]
+                print 'mismatch', bibcode, field  # , m1[field], m2[field]
                 mismatches.append(field)
         
         if len(mismatches) > 0:
@@ -307,10 +307,14 @@ class Metrics():
         
         # hack because we have bad defaults in new sql
         # match None to False and []
-        if (m1[fieldname] == None):
-            if m2[fieldname] == False or m2[fieldname] == []:
-                return False  
-                                               
+        #if (m1[fieldname] == None):
+        #    if m2[fieldname] == False or m2[fieldname] == []:
+        #        return False  
+
+        # metrics database has sql null for some reads and downloads while new metrics has array of 0 values
+        if m2[fieldname] == None and (m1[fieldname] == [] or m1[fieldname] == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]):
+            return False
+            
         
         if type(m1[fieldname]) != type(m2[fieldname]):
             return True
@@ -319,22 +323,56 @@ class Metrics():
             return False
 
         if fieldname in ('downloads', 'reads'):
-            for v1,v2 in zip(m1[fieldname], m2[fieldname]):
-                limit = max(3, v1 * .1)
-                if abs(v1 - v2) > limit:
+            # only last value may be different to account for slightly older test data
+            t1 = m1[fieldname][:-1]
+            t2 = m2[fieldname][:-1]
+            for v1,v2 in zip(t1, t2):
+                if v1 != v2:
                     print fieldname, v1, v2
                     return True;
+            t1 = m1[fieldname][-1]
+            t2 = m2[fieldname][-1]
+            delta = abs(t1 - t2)
+            limit = max(5, v1 * .15)
+            if delta >  limit:
+                print fieldname, v1, v2
+                return True
             return False
 
         # if value is an array, compare individual elements
         if isinstance(m1[fieldname], list):
-            if len(m1[fieldname]) != len(m2[fieldname]):
-                print 'list length', len(m1[fieldname]), len(m2[fieldname])
+            delta = abs(len(m1[fieldname]) - len(m2[fieldname]))
+            if delta > 0 and delta < 3:
+                print 'warning: list length', len(m1[fieldname]), len(m2[fieldname])
+            elif delta >= 3: 
                 return True
-            for v in m1[fieldname]:
-                if v not in m2[fieldname]:
-                    print 'list element missing', v
-                    return True
+
+            warning_count = 0
+            if fieldname == 'rn_citation_data':
+                m1_bibs = [element['bibcode'] for element in m1[fieldname]]
+                m2_bibs = [element['bibcode'] for element in m2[fieldname]]
+                for v in m1_bibs:
+                    if v not in m2_bibs:
+                        warning_count += 1
+                        print 'warning: list element missing', v
+                for v in m2_bibs:
+                    if v not in m1_bibs:
+                        warning_count += 1
+                        print 'warning:: list element missing', v
+            else:
+                for v in m1[fieldname]:
+                    if v not in m2[fieldname]:
+                        warning_count += 1
+                        print 'warning: list element missing', v
+
+                for v in m2[fieldname]:
+                    if v not in m1[fieldname]:
+                        warning_count += 1
+                        print 'warning:: list element missing', v
+
+            if warning_count > 3:
+                return True
+
             #for v1,v2 in zip(m1[fieldname],m2[fieldname]):
             #    mismatch = Metrics.value_mismatch(v1,v2)
             #    if mismatch:
@@ -414,7 +452,7 @@ if __name__ == "__main__":
 
     elif args.command == 'metricsCompare' and args.bibcode:
         metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
-        metrics2 = Metrics(args.metricsSchema, METRICS_DATABASE2)
+        metrics2 = Metrics('', METRICS_DATABASE2)
         if (args.bibcode == 'stdin'):
             while True:
                 line = sys.stdin.readline()
