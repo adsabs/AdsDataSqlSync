@@ -36,6 +36,11 @@ class SqlSync:
         self.sql_sync_connection = self.sql_sync_engine.connect()
         self.row_view_table = self.get_row_view_table()
 
+    def get_delta_table(self):
+        return Table('ChangedRows', meta,
+                     Column('bibcode', String, primary_key=True),
+                     schema=self.schema_name) 
+
     def get_canonical_table(self):
         return Table('canonical', meta,
                      Column('bibcode', String, primary_key=True),

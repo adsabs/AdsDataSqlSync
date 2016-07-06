@@ -20,6 +20,7 @@ create schema :v1
 	       refereed_citations character varying[],
 	       author_num integer,
 	       an_refereed_citations real,
-	       	modtime timestamp without time zone);
+	       modtime timestamp without time zone)
 
+	create index on Metrics (bibcode);
 

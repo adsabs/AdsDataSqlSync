@@ -13,9 +13,10 @@ from collections import defaultdict
 from datetime import datetime
 import time
 import sys
+import json
 import argparse
 
-sys.path.append('../sqlSync')
+sys.path.append('/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/sqlSync')
 from row_view import SqlSync
 
 from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
@@ -31,12 +32,15 @@ meta = MetaData()
 
 class Metrics():
 
-    def __init__(self, metrics_schema='metrics', metrics_database='postgresql://postgres@localhost:5432/postgres'):
+    def __init__(self, metrics_schema='metrics', metrics_database='postgresql://postgres@localhost:5432/postgres',
+                 from_scratch=False, copy_from_program=False):
         self.table = self.get_metric_table(metrics_schema)
         self.schema = metrics_schema
         self.database = metrics_database
         self.engine = create_engine(self.database)
         self.connection = self.engine.connect()
+        self.from_scratch = from_scratch
+        self.copy_from_program = copy_from_program
         self.updates = []
         self.inserts = []
         self.upserts = []
@@ -96,6 +100,10 @@ class Metrics():
         if bibcode is None:
             print 'error: cannont save metrics data that does not have a bibcode'
             return
+        
+        if self.copy_from_program:
+            print self.to_sql(values_dict)
+            return
 
         self.upserts.append(values_dict)
 
@@ -128,36 +136,30 @@ class Metrics():
         #    existing_bibcodes.append(row[0])
         #print 'number of existing bibcodes = ', len(existing_bibcodes)
 
+        if self.copy_from_program:
+            return
+
         updates = []
         inserts = []
-        for d in self.upserts:
-            current_bibcode = d['bibcode']
-            s = select([self.table]).where(self.table.c.bibcode== current_bibcode)
-            r = self.connection.execute(s)
-            first = r.first()
-            #print 'first = ', first, current_bibcode
-            #q = 'select bibcode from metrics where bibcode=%s'
-            #result = metrics_connection.execute(q, current_bibcode)
-            #first = result.first()
-            if first:
-                d['tmp_bibcode'] = d['bibcode']
-                updates.append(d)
-            else:
-                inserts.append(d)
+        if self.from_scratch:
+            inserts = self.upserts
+        else:
+            for d in self.upserts:
+                current_bibcode = d['bibcode']
+                s = select([self.table]).where(self.table.c.bibcode== current_bibcode)
+                r = self.connection.execute(s)
+                first = r.first()
+                if first:
+                    d['tmp_bibcode'] = d['bibcode']
+                    updates.append(d)
+                else:
+                    inserts.append(d)
 
         if len(updates):
             result = self.connection.execute(self.u, updates)
-            #self.tmp_update_buffer = []
-            #self.tmp_count = 0;
-            #updater = update(self.table).where(self.table.c.bibcode == bibcode)
-            #updater = updater.values(values_dict)
-            #result = metrics_connection.execute([updater])
         if len(inserts):
             result = self.connection.execute(self.table.insert(), inserts)
 
-            #print 'inserts incomplete!', len(self.inserts)
-            #inserter = self.table.insert(values_dict)
-            #result = metrics_connection.execute(inserter)
         self.inserts = []
         self.updates = []
         self.upserts = []
@@ -169,27 +171,48 @@ class Metrics():
         first = r.first()
         return first
 
-    def update_metrics_changed(self, row_view_schema='ingest'):
+    def update_metrics_changed(self, row_view_schema='ingest', delta_schema='delta'):
+        delta_sync = SqlSync(delta_schema)
+        delta_table = delta_sync.get_delta_table()
         sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.get_changed_rows_table('changedrowsm', 'public')
+        row_view = sql_sync.get_row_view_table()
         connection = sql_sync_engine.connect()
-        s = select(['row_view'])
+        s = select([delta_table])
         results = connection.execute(s)
-        for row_view in results:
+        for delta_row in results:
+            row = sql_sync.get_row_view(delta_row['bibcode'])
             metrics_dict = self.row_view_to_metrics(row_view)
             self.save(metrics_dict)
-            self.flush()
+        self.flush()
 
     # paper from 1988: 1988PASP..100.1134B
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
         sql_sync = SqlSync(row_view_schema)
         row_view = sql_sync.get_row_view(bibcode)
-        print row_view
-        print row_view['bibcode']
         metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
         self.save(metrics_dict)
         self.flush()
+
+    def to_sql(self, metrics_dict):
+        """return string representation of metrics data suitable for postgres copy from program"""
+        return_str = "1" + '\t' + '"' +  metrics_dict['bibcode'] + '"'
+        return_str += '\t' + str(metrics_dict['refereed'])
+        return_str += '\t' + str(metrics_dict['rn_citations'])
+        return_str += '\t' + json.dumps(metrics_dict['rn_citation_data'])
+        return_str += '\t' + '{' + str(metrics_dict['downloads']).strip('[]') + '}'
+        return_str += '\t' + '{' + str(metrics_dict['reads']).strip('[]') + '}'
+        return_str += '\t' + str(metrics_dict['an_citations'])
+        return_str += '\t' + str(metrics_dict['refereed_citation_num'])
+        return_str += '\t' + str(metrics_dict['citation_num'])
+        return_str += '\t' + str(metrics_dict['reference_num'])
+        return_str += '\t' + '{' + str(metrics_dict['citations']).strip('[]') + '}'
+        return_str += '\t' + '{' + str(metrics_dict['refereed_citations']).strip('[]') + '}'
+        return_str += '\t' + str(metrics_dict['author_num'])
+        return_str += '\t' + str(metrics_dict['an_refereed_citations'])
+        return_str += '\t' + str(datetime.now())
+        return return_str
+
 
     def update_metrics_all(self, row_view_schema='ingest'):
         start_time = time.time()
@@ -201,22 +224,24 @@ class Metrics():
         while True:
             s = select([table])
             s = s.limit(step_size).offset(offset).order_by('bibcode')
-            print 'getting data...', count, offset
+            #print 'getting data...', count, offset
             connection = sql_sync.sql_sync_engine.connect()
             results = connection.execute(s)
-            print 'received data: ', results.rowcount
+            #print 'received data: ', results.rowcount
             for row_view in results:
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
                 if count % 1000 == 0:
-                    print row_view.bibcode
+                    pass
+                    #print row_view.bibcode
                 count += 1
 
             if results.rowcount < step_size:
                 # here if last read got the last chunk of data
-                self.flush()
-                end_time = time.time()
-                print 'done:', end_time - start_time
+                if not self.copy_from_program:
+                    self.flush()
+                    end_time = time.time()
+                    #print 'done:', end_time - start_time
                 return;
 
             offset += step_size
@@ -231,7 +256,7 @@ class Metrics():
         bibcode = row_view['bibcode']
         metrics_dict = {'bibcode': bibcode}
         metrics_dict['refereed'] = row_view['refereed']
-        metrics_dict['citations'] = row_view['citations']
+        metrics_dict['citations'] = [x.encode('utf-8') for x in row_view['citations']]
         metrics_dict['reads'] = row_view['reads']
         metrics_dict['downloads'] = row_view['downloads']
         
@@ -259,11 +284,14 @@ class Metrics():
 
                 citation_normalized_references = 1.0 / float(max(5, len_citation_reference))
                 normalized_reference += citation_normalized_references
-                citations_json_records.append({'bibcode': citation_bibcode, 'ref_norm': citation_normalized_references, 'auth_norm': 1.0 / metrics_dict['author_num'], 
-                                               'pubyear': int(bibcode[:4]), 'cityear': int(citation_bibcode[:4])})
-
+                tmp_json = {"bibcode":  citation_bibcode.encode('utf-8'),
+                            "ref_norm": citation_normalized_references,
+                            "auth_norm": 1.0 / metrics_dict['author_num'],
+                            "pubyear": int(bibcode[:4]),
+                            "cityear": int(citation_bibcode[:4])}
+                citations_json_records.append(tmp_json)
                 if (citation_refereed):
-                    refereed_citations.append(citation_bibcode)
+                    refereed_citations.append(citation_bibcode.encode('utf-8'))
 
         metrics_dict['refereed_citations'] = refereed_citations
         metrics_dict['refereed_citation_num'] = len(refereed_citations)
@@ -428,26 +456,27 @@ class Metrics():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='process column files')
-    parser.add_argument('-delta', action='store_const', const=True, help='only delta')
+    parser.add_argument('-deltaSchema', default=None, help='schema for delta table')
     parser.add_argument('-full', action='store_const', const=False, help='full import')
+    parser.add_argument('-fromScratch', action='store_true', default=False, help='assume empty metrics database')
+    parser.add_argument('-copyFromProgram', action='store_true', default=False, help='called from postgres, output to stdout')
     parser.add_argument('command', help='metricsCompute|metricsCompare')
     parser.add_argument('-metricsSchema', default='metrics', help='schema for metrics table')
     parser.add_argument('-rowViewSchema', default='ingest', help='schema for column tables')
     parser.add_argument('-b', '--bibcode', help='bibcode or stdin to read bibcodes')
     
     args = parser.parse_args()
-    print 'processing: ', args
     if args.command == 'metricsCompute' and args.bibcode:
-        m = Metrics(args.metricsSchema)
+        m = Metrics(args.metricsSchema,from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
         m.update_metrics_test(args.bibcode, args.rowViewSchema)
-        print 'metrics bibcode computed for', args.bibcode
 
-    elif args.command == 'metricsCompute' and args.delta:
-        print 'saving delta not imlemented'
+    elif args.command == 'metricsCompute' and args.deltaSchema:
+        print 'saving delta'
+        m = Metrics(args.metricsSchema, from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
+        m.update_metrics_delta(args.bibcode, args.rowViewSchema)
 
     elif args.command == 'metricsCompute':
-        print 'doing update_metrics_all with sql sync schema', args.rowViewSchema
-        m = Metrics(args.metricsSchema)
+        m = Metrics(args.metricsSchema, from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
         m.update_metrics_all(args.rowViewSchema)
 
     elif args.command == 'metricsCompare' and args.bibcode:

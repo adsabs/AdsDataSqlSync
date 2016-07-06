@@ -1,8 +1,7 @@
-#!/bin/bash
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 4 ]; then
     echo 'create database schema, load column files, create row view and populate metrics database'
-    echo 'usage: fromScratch sqlSyncSchemaName metricsSchemaName'
+    echo 'usage: fromScratch sqlSyncSchemaName metricsSchemaName baselineSchemaName deltaSchemaName'
     exit 1
 fi
 
@@ -13,7 +12,9 @@ psql -h localhost -U postgres -v v1=$1 -f ../sqlSync/scripts/loadColumnFiles.sql
 # create row view
 psql -h localhost -U postgres -v v1=$1 -f ../sqlSync/scripts/createSqlSyncRowView.sql
 
-psql -h localhost -U postgres -v v1=$2 -f ../metrics/scripts/createMetricsTable.sql
+psql -h localhost -U postgres -v v1=$1 v2=$3 v3=$4 -f ../sqlSync/createSqlSyncChangedView.sql
+
+#psql -h localhost -U postgres -v v1=$2 -f ../metrics/scripts/createMetricsTable.sql
 
 # update all bibcodes in metrics database
-python ../metrics/metrics.py metricsCompute -rowViewSchema $1 -metricsSchema $2 -fromScratch
+python ../metrics/metrics.py metricsCompute -rowViewSchema $1 -metricsSchema $2 --deltaSchema $4
