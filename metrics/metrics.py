@@ -214,11 +214,11 @@ class Metrics():
         return return_str
 
 
-    def update_metrics_all(self, row_view_schema='ingest'):
+    def update_metrics_all(self, row_view_schema='ingest', start_offset=0, end_offset=-1):
         start_time = time.time()
         step_size = 1000
         count = 0
-        offset =  0
+        offset = start_offset
         sql_sync = SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
         while True:
@@ -231,17 +231,18 @@ class Metrics():
             for row_view in results:
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
-                if count % 1000 == 0:
-                    pass
-                    #print row_view.bibcode
                 count += 1
+                if end_offset <= (count + start_offset):
+                    self.flush()
+                    end_time = time.time()
+                    return
+
 
             if results.rowcount < step_size:
                 # here if last read got the last chunk of data
-                if not self.copy_from_program:
-                    self.flush()
-                    end_time = time.time()
-                    #print 'done:', end_time - start_time
+                self.flush()
+                end_time = time.time()
+                #print 'done:', end_time - start_time
                 return;
 
             offset += step_size
@@ -464,6 +465,8 @@ if __name__ == "__main__":
     parser.add_argument('-metricsSchema', default='metrics', help='schema for metrics table')
     parser.add_argument('-rowViewSchema', default='ingest', help='schema for column tables')
     parser.add_argument('-b', '--bibcode', help='bibcode or stdin to read bibcodes')
+    parser.add_argument('-startOffset', default=0, help='offset into list of bibcodes to process for chunking support')
+    parser.add_argument('-endOffset', default=-1, help='when to stop processing list of bibcodes for chunking support')
     
     args = parser.parse_args()
     if args.command == 'metricsCompute' and args.bibcode:
@@ -477,7 +480,7 @@ if __name__ == "__main__":
 
     elif args.command == 'metricsCompute':
         m = Metrics(args.metricsSchema, from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
-        m.update_metrics_all(args.rowViewSchema)
+        m.update_metrics_all(args.rowViewSchema, start_offset=int(args.startOffset), end_offset=int(args.endOffset))
 
     elif args.command == 'metricsCompare' and args.bibcode:
         metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
