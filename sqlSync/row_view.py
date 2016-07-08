@@ -44,6 +44,7 @@ class SqlSync:
     def get_canonical_table(self):
         return Table('canonical', meta,
                      Column('bibcode', String, primary_key=True),
+                     Column('id', Integer),
                      schema=self.schema_name) 
 
     def get_author_table(self):
@@ -114,6 +115,7 @@ class SqlSync:
     def get_row_view_table(self):
         return Table('rowviewm', meta,
                      Column('bibcode', String, primary_key=True),
+                     Column('id', Integer),
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
                      Column('simbad_objects', ARRAY(String)),
@@ -133,6 +135,7 @@ class SqlSync:
     def get_changed_rows_table(self, table_name, schema_name):
         return Table('table_name', meta,
                      Column('bibcode', String, primary_key=True),
+                     Column('id', Integer),
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
                      Column('simbad_objects', ARRAY(String)),

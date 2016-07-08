@@ -196,7 +196,7 @@ class Metrics():
 
     def to_sql(self, metrics_dict):
         """return string representation of metrics data suitable for postgres copy from program"""
-        return_str = "1" + '\t' + '"' +  metrics_dict['bibcode'] + '"'
+        return_str = str(metrics_dict['id']) + '\t' + metrics_dict['bibcode']
         return_str += '\t' + str(metrics_dict['refereed'])
         return_str += '\t' + str(metrics_dict['rn_citations'])
         return_str += '\t' + json.dumps(metrics_dict['rn_citation_data'])
@@ -214,7 +214,7 @@ class Metrics():
         return return_str
 
 
-    def update_metrics_all(self, row_view_schema='ingest', start_offset=0, end_offset=-1):
+    def update_metrics_all(self, row_view_schema='ingest', start_offset=1, end_offset=-1):
         start_time = time.time()
         step_size = 1000
         count = 0
@@ -223,20 +223,19 @@ class Metrics():
         table = sql_sync.get_row_view_table()
         while True:
             s = select([table])
-            s = s.limit(step_size).offset(offset).order_by('bibcode')
-            #print 'getting data...', count, offset
-            connection = sql_sync.sql_sync_engine.connect()
+            s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
+            #print 'getting data...', count, offset, step_size
+            connection = sql_sync.sql_sync_connection;  #sql_sync.sql_sync_engine.connect()
             results = connection.execute(s)
             #print 'received data: ', results.rowcount
             for row_view in results:
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
                 count += 1
-                if end_offset <= (count + start_offset):
+                if end_offset > 0 and end_offset <= (count + start_offset):
                     self.flush()
                     end_time = time.time()
                     return
-
 
             if results.rowcount < step_size:
                 # here if last read got the last chunk of data
@@ -256,6 +255,7 @@ class Metrics():
     def row_view_to_metrics(self, row_view, sql_sync):
         bibcode = row_view['bibcode']
         metrics_dict = {'bibcode': bibcode}
+        metrics_dict['id'] = row_view['id']
         metrics_dict['refereed'] = row_view['refereed']
         metrics_dict['citations'] = [x.encode('utf-8') for x in row_view['citations']]
         metrics_dict['reads'] = row_view['reads']
@@ -465,7 +465,7 @@ if __name__ == "__main__":
     parser.add_argument('-metricsSchema', default='metrics', help='schema for metrics table')
     parser.add_argument('-rowViewSchema', default='ingest', help='schema for column tables')
     parser.add_argument('-b', '--bibcode', help='bibcode or stdin to read bibcodes')
-    parser.add_argument('-startOffset', default=0, help='offset into list of bibcodes to process for chunking support')
+    parser.add_argument('-startOffset', default=1, help='offset into list of bibcodes to process for chunking support')
     parser.add_argument('-endOffset', default=-1, help='when to stop processing list of bibcodes for chunking support')
     
     args = parser.parse_args()

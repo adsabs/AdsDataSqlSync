@@ -5,6 +5,7 @@
 
     CREATE MATERIALIZED VIEW :v1.RowViewM AS
          select bibcode,
+	      id,
               coalesce(authors, ARRAY[]::text[]) as authors,
               coalesce(refereed, FALSE) as refereed,
               coalesce(simbad_objects, ARRAY[]::text[]) as simbad_objects,
@@ -24,3 +25,4 @@
        natural left join :v1.Download natural left join :v1.Reads natural left join :v1.Reference;
 
      create index on :v1.RowViewM (bibcode);
+     create index on :v1.RowViewM (id);
