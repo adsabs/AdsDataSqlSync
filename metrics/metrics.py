@@ -26,10 +26,6 @@ meta = MetaData()
 
 # part of the Metrics system
 
-##metrics_engine = create_engine('postgresql://postgres@localhost:5432/metrics', echo=False)
-#metrics_engine = create_engine('postgresql://postgres@localhost:5432/postgres', echo=False)
-#metrics_connection = metrics_engine.connect()
-
 class Metrics():
 
     def __init__(self, metrics_schema='metrics', metrics_database='postgresql://postgres@localhost:5432/postgres',
@@ -41,8 +37,6 @@ class Metrics():
         self.connection = self.engine.connect()
         self.from_scratch = from_scratch
         self.copy_from_program = copy_from_program
-        self.updates = []
-        self.inserts = []
         self.upserts = []
         self.u = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
             values ({'refereed': bindparam('refereed'),
@@ -82,7 +76,7 @@ class Metrics():
                      Column('an_refereed_citations', postgresql.REAL),
                      Column('modtime', DateTime),
                      schema=schema_name,
-                     extend_existing=True)  # do I really want to extend?
+                     extend_existing=True) 
 
     def test_query(self, bibcode):
         q ='select refereed,array_length(reference,1),bibcode from ingest.RowViewM where bibcode = ANY ((select citations from ingest.RowViewM where bibcode=\'' + bibcode + '\')::text[]);'
@@ -95,6 +89,7 @@ class Metrics():
 
 
     def save(self, values_dict):
+        """buffered save does actual save every 100 records, call flush at end of processing"""
 
         bibcode = values_dict['bibcode']
         if bibcode is None:
@@ -111,39 +106,21 @@ class Metrics():
         if (self.tmp_count % 100) != 0:
             self.flush()
             self.tmp_count = 0
-            #self.tmp_update_buffer.append(values_dict)
-   
-
 
 
     def flush(self):
-
-        # first, get list of bibcodes to determine insert/update
-        #bibcodes = [d['bibcode'] for d in self.upserts]
-        #bibcodes_param = ""
-        #for b in bibcodes:
-        #    if len(bibcodes_param) == 0:
-        #        bibcodes_param = '\'' + b + '\''
-        #    else:
-        #        bibcodes_param += ',' + '\'' + b + '\''
-        #bibcodes_param = '(' + bibcodes_param + ')'
-        #q = 'select bibcode from metrics where bibcode in ' + bibcodes_param
-        #result = metrics_connection.execute(q)
-        #rows = result.fetchall()
-        
-        #existing_bibcodes = []
-        #for row in rows:
-        #    existing_bibcodes.append(row[0])
-        #print 'number of existing bibcodes = ', len(existing_bibcodes)
-
+        """bulk write records to sql database"""
         if self.copy_from_program:
             return
 
         updates = []
         inserts = []
         if self.from_scratch:
+            # here if we just assume these records are not in database and insert
+            # it may have just been created so we just insert, not update
             inserts = self.upserts
         else:
+            # here if we have to check each record to see if we update or insert
             for d in self.upserts:
                 current_bibcode = d['bibcode']
                 s = select([self.table]).where(self.table.c.bibcode== current_bibcode)
@@ -160,12 +137,11 @@ class Metrics():
         if len(inserts):
             result = self.connection.execute(self.table.insert(), inserts)
 
-        self.inserts = []
-        self.updates = []
         self.upserts = []
 
         
     def read(self, bibcode):
+        """read the passed bibcode from the postgres database"""
         s = select([self.table]).where(self.table.c.bibcode == bibcode)
         r = self.connection.execute(s)
         first = r.first()
@@ -206,8 +182,8 @@ class Metrics():
         return_str += '\t' + str(metrics_dict['refereed_citation_num'])
         return_str += '\t' + str(metrics_dict['citation_num'])
         return_str += '\t' + str(metrics_dict['reference_num'])
-        return_str += '\t' + '{' + str(metrics_dict['citations']).strip('[]') + '}'
-        return_str += '\t' + '{' + str(metrics_dict['refereed_citations']).strip('[]') + '}'
+        return_str += '\t' + '{' + json.dumps(metrics_dict['citations']).strip('[]') + '}'
+        return_str += '\t' + '{' + json.dumps(metrics_dict['refereed_citations']).strip('[]') + '}'
         return_str += '\t' + str(metrics_dict['author_num'])
         return_str += '\t' + str(metrics_dict['an_refereed_citations'])
         return_str += '\t' + str(datetime.now())
@@ -215,6 +191,8 @@ class Metrics():
 
 
     def update_metrics_all(self, row_view_schema='ingest', start_offset=1, end_offset=-1):
+        """update all elements in the metrics database between the passed id offsets"""
+        # we request one block of rows from the database at a time
         start_time = time.time()
         step_size = 1000
         count = 0
@@ -224,24 +202,22 @@ class Metrics():
         while True:
             s = select([table])
             s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
-            #print 'getting data...', count, offset, step_size
-            connection = sql_sync.sql_sync_connection;  #sql_sync.sql_sync_engine.connect()
+            connection = sql_sync.sql_sync_connection; 
             results = connection.execute(s)
-            #print 'received data: ', results.rowcount
             for row_view in results:
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
                 count += 1
                 if end_offset > 0 and end_offset <= (count + start_offset):
+                    # here if we processed the last requested row
                     self.flush()
                     end_time = time.time()
                     return
 
             if results.rowcount < step_size:
-                # here if last read got the last chunk of data
+                # here if last read got the last block of data and we're done processing it
                 self.flush()
                 end_time = time.time()
-                #print 'done:', end_time - start_time
                 return;
 
             offset += step_size
@@ -253,11 +229,13 @@ class Metrics():
     #  c/a = normalized citations
     #  sum over N papers
     def row_view_to_metrics(self, row_view, sql_sync):
+        """convert the passed row view into a complete metrics dictionary"""
+        # first do easy fields
         bibcode = row_view['bibcode']
         metrics_dict = {'bibcode': bibcode}
         metrics_dict['id'] = row_view['id']
         metrics_dict['refereed'] = row_view['refereed']
-        metrics_dict['citations'] = [x.encode('utf-8') for x in row_view['citations']]
+        metrics_dict['citations'] = row_view['citations']
         metrics_dict['reads'] = row_view['reads']
         metrics_dict['downloads'] = row_view['downloads']
         
@@ -265,12 +243,11 @@ class Metrics():
         metrics_dict['author_num'] = max(len(row_view['authors']),1) if row_view['authors'] else 1
         metrics_dict['reference_num'] = len(row_view['reference']) if row_view['reference'] else 0
 
-
+        # next deal with papers that cite the current one
         # compute histogram, normalized values of citations
         #  and create list of refereed citations
         citations = row_view['citations']
         normalized_reference = 0.0
-        # citations_histogram = defaultdict(float)
         citations_json_records = []
         refereed_citations = []
         total_normalized_citations = 0.0
@@ -292,7 +269,7 @@ class Metrics():
                             "cityear": int(citation_bibcode[:4])}
                 citations_json_records.append(tmp_json)
                 if (citation_refereed):
-                    refereed_citations.append(citation_bibcode.encode('utf-8'))
+                    refereed_citations.append(citation_bibcode)
 
         metrics_dict['refereed_citations'] = refereed_citations
         metrics_dict['refereed_citation_num'] = len(refereed_citations)
@@ -312,6 +289,7 @@ class Metrics():
 
     @staticmethod
     def metrics_mismatch(bibcode, metrics1, metrics2):
+        """test function to compare metric records from two different databases"""
         m1 = metrics1.read(bibcode)
         #m2 = metrics2.read('1988PASP..100.1134B')
         m2 = metrics2.read(bibcode)
@@ -333,17 +311,10 @@ class Metrics():
 
     @staticmethod
     def field_mismatch(fieldname, m1, m2):
-        
-        # hack because we have bad defaults in new sql
-        # match None to False and []
-        #if (m1[fieldname] == None):
-        #    if m2[fieldname] == False or m2[fieldname] == []:
-        #        return False  
-
+        """test function to compare a field in two different metrics dictionaries"""
         # metrics database has sql null for some reads and downloads while new metrics has array of 0 values
         if m2[fieldname] == None and (m1[fieldname] == [] or m1[fieldname] == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]):
             return False
-            
         
         if type(m1[fieldname]) != type(m2[fieldname]):
             return True
@@ -402,11 +373,6 @@ class Metrics():
             if warning_count > 3:
                 return True
 
-            #for v1,v2 in zip(m1[fieldname],m2[fieldname]):
-            #    mismatch = Metrics.value_mismatch(v1,v2)
-            #    if mismatch:
-            #        print 'list mismatch', v1, v2
-            #        return True
             return False
 
         # otherwise, see if scalar values match
@@ -414,6 +380,7 @@ class Metrics():
 
     @staticmethod
     def value_mismatch(v1, v2):
+        """test function to compare to scalar values from two different metrics dictionaries"""
         if type(v1) != type(v2):
             print 'type mismatch'
             return True
@@ -458,7 +425,7 @@ class Metrics():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='process column files')
     parser.add_argument('-deltaSchema', default=None, help='schema for delta table')
-    parser.add_argument('-full', action='store_const', const=False, help='full import')
+    #parser.add_argument('-full', action='store_const', const=False, help='full import')
     parser.add_argument('-fromScratch', action='store_true', default=False, help='assume empty metrics database')
     parser.add_argument('-copyFromProgram', action='store_true', default=False, help='called from postgres, output to stdout')
     parser.add_argument('command', help='metricsCompute|metricsCompare')

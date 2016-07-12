@@ -51,7 +51,7 @@ select process_file(:schema_table, :python_filename, :data_filename);
 select process_file(:schema_table, :python_filename, :data_filename);
 
 \set python_filename '\'' :python_root '/simpleIngest.py' '\''
-\set data_filename '\'' :data_root '/relevance/docmetrics.tab' '\''
+\set data_filename '\'' :data_root '/citation/all.links' '\''
 \set schema_table '\'' :row_view_schema '.Citation' '\''
 select process_file(:schema_table, :python_filename, :data_filename);
 

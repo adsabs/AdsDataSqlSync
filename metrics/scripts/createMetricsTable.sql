@@ -22,5 +22,5 @@ create schema :v1
 	       an_refereed_citations real,
 	       modtime timestamp without time zone)
 
-	create index on Metrics (bibcode);
-
+	create index on Metrics (bibcode)
+	create index on Metrics (id);
