@@ -15,6 +15,7 @@ from datetime import datetime
 import time
 import sys
 import argparse
+import os
 
 #from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
@@ -160,4 +161,37 @@ class SqlSync:
         first = row_view_result.first()
         return first
 
+    def verify(self, data_dir):
+        """verify that the data was properly read in"""
+        bibcodes_file_size = os.path.getsize(data_dir + '/bibcodes.list.can')
+        num_bibcodes_file = bibcodes_file_size / 20  #size of bibcode plus newline
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        num_bibcodes_sql = sess.query(self.row_view_table).count()
+        if num_bibcodes_file == num_bibcodes_sql:
+            print 'success: database has expected number of bibcodes:', num_bibcodes_file
+            return True
+        else:
+            error = 'error: number of bibcodes do not match: {} in file and {} in database'.format(num_bibcodes_file, num_bibcodes_sql)
+            print error
+            return False
 
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='verify ingest of column files')
+    parser.add_argument('command', help='verify')
+    parser.add_argument('-rowViewSchema', default='ingest', help='schema for column tables')
+    parser.add_argument('-dataDir', help='directory for column files', )
+    args = parser.parse_args()
+    if args.command == 'verify':
+        if not args.dataDir:
+            print 'argument -dataDir required'
+            sys.exit(2)
+        row_view = SqlSync(args.rowViewSchema)
+        verify = row_view.verify(args.dataDir)
+        if verify:
+            sys.exit(0)
+        sys.exit(1)
+        
