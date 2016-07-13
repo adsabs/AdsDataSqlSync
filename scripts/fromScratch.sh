@@ -17,4 +17,4 @@ psql -h localhost -U postgres -v v1=$2 -f ../metrics/scripts/createMetricsTable.
 
 # update all bibcodes in metrics database
 #python ../metrics/metrics.py metricsCompute -rowViewSchema $1 -metricsSchema $2 -fromScratch
-../metrics/scripts/loadMetricsData.sh
+../metrics/scripts/loadMetricsData.sh $1 $2 $3 $4
