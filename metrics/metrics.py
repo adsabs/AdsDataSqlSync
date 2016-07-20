@@ -423,7 +423,7 @@ class Metrics():
         
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='process column files')
+    parser = argparse.ArgumentParser(description='process row view to Metrics')
     parser.add_argument('-deltaSchema', default=None, help='schema for delta table')
     #parser.add_argument('-full', action='store_const', const=False, help='full import')
     parser.add_argument('-fromScratch', action='store_true', default=False, help='assume empty metrics database')

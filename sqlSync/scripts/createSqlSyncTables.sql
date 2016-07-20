@@ -3,7 +3,7 @@ drop schema if exists :v1 cascade;
 
 create schema :v1
 
-       create table Canonical (id SERIAL, bibcode text primary key)
+       create table Canonical (bibcode text primary key, id SERIAL)
        create table Author (bibcode text primary key, authors text[])
        create table Refereed (bibcode text primary key, refereed boolean)
        create table Simbad (bibcode text primary key, simbad_objects text[])

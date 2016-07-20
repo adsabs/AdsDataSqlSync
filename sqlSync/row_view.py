@@ -162,20 +162,37 @@ class SqlSync:
         return first
 
     def verify(self, data_dir):
-        """verify that the data was properly read in"""
-        bibcodes_file_size = os.path.getsize(data_dir + '/bibcodes.list.can')
-        num_bibcodes_file = bibcodes_file_size / 20  #size of bibcode plus newline
+        """verify that the data was properly read in
+        we only check files that don't repeat bibcodes, so the
+        number of bibcodes equals the number of records
+        """
+        self.verify_aux(data_dir, '/bibcodes.list.can', self.get_canonical_table())
+        self.verify_aux(data_dir, '/facet_authors/all.links', self.get_author_table())
+        self.verify_aux(data_dir, '/reads/all.links', self.get_reads_table())
+        self.verify_aux(data_dir, '/reads/downloads.links', self.get_download_table())
+        self.verify_aux(data_dir, '/refereed/all.links', self.get_refereed_table())
+        self.verify_aux(data_dir, '/relevance/docmetrics.tab', self.get_relevance_table())
+
+
+    def verify_aux(self, data_dir, file_name, sql_table):
         Session = sessionmaker()
         sess = Session(bind=self.sql_sync_connection)
-        num_bibcodes_sql = sess.query(self.row_view_table).count()
-        if num_bibcodes_file == num_bibcodes_sql:
-            print 'success: database has expected number of bibcodes:', num_bibcodes_file
-            return True
-        else:
-            error = 'error: number of bibcodes do not match: {} in file and {} in database'.format(num_bibcodes_file, num_bibcodes_sql)
-            print error
+        file = data_dir + file_name
+        file_count = self.count_lines(file)
+        sql_count = sess.query(sql_table).count()
+        if file_count != sql_count:
+            print file_name, 'count mismatch:', file_count, sql_count
             return False
+        return True
 
+        
+
+    def count_lines(self, file):
+        count = 0
+        with open(file, "r") as f:
+            for line in f:
+                count += 1
+        return count
 
 
 
@@ -194,4 +211,23 @@ if __name__ == "__main__":
         if verify:
             sys.exit(0)
         sys.exit(1)
+    if args.command == 'downloads':
+        row_view = SqlSync(args.rowViewSchema)
+        Session = sessionmaker()
+        sess = Session(bind=row_view.sql_sync_connection)
+        t = row_view.get_download_table()
+        count = 0
+        with open(args.dataDir + '/reads/d1.txt') as f:
+            for line in f:
+                s = select([t]).where(t.c.bibcode == line.strip())
+                rp = row_view.sql_sync_connection.execute(s)
+                r = rp.first()
+                if r is None:
+                    print 'error', line, len(line)
+                count += 1
+                if count % 1000000 == 0:
+                    print count
+        print 'count = ', count
+
+                
         
