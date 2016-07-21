@@ -3,15 +3,20 @@ import sys
 import re
 import argparse
 import utils
+from sqlalchemy.orm import sessionmaker
 
+from row_view import SqlSync
 
 config = {}
 logger = None
 
 class ColumnFileReader:
-    """iterator for data in column files that combines values for repeated bibcodes"""
+    """iterator for data in column files that combines values for repeated bibcodes
+       also works with column files that combine all data for bibcode on a single line
+    """
 
     def __init__(self, path, as_array=False):
+        """ use as_array to indicate the value for each line should be stored as an array """
         self.file_descriptor = open(path, 'r')
         self.bibcode_length = 19
         self.as_array = as_array
@@ -21,6 +26,7 @@ class ColumnFileReader:
         return self
 
     def next(self):
+        """ read next line and all following lines with the same bibcode"""
         line = self.file_descriptor.readline()
         if len(line) == 0:
             self.file_descriptor.close()
@@ -37,7 +43,8 @@ class ColumnFileReader:
                 value = value.split('\t')
             else:
                 value = [value]
-
+        
+        # if bibcode on current line matches next line, combine values
         match = self._bibcode_match(bibcode)
         if match and isinstance(value, str):
             value = [value]
@@ -48,6 +55,7 @@ class ColumnFileReader:
         return bibcode, value
 
     def _bibcode_match(self, bibcode):
+        """ peek ahead to next line for bibcode and check for mactch"""
         file_location = self.file_descriptor.tell()
         next_line = self.file_descriptor.readline()
         self.file_descriptor.seek(file_location)
@@ -103,12 +111,16 @@ def process_file(passed_type, as_array=False, quote_value=False, tab_separator=F
 
 
 def process_value(value, as_array=False, quote_value=False, tab_separator=False):
+    """ convert value to what Postgres will accept """
     if '\x00' in value:
+        # postgres does not like nulls in strings
+        logger.error('in columnFileIngest.process_value with null value in string: {}', value)
         value = value.replace('\x00', '')
 
     return_value = ''
     if tab_separator and isinstance(value, list) and len(value) == 1:
         value = value[0]
+
     output_separator = ','
     if (as_array == False):
         output_separator = '\t'
@@ -142,20 +154,48 @@ def process_value(value, as_array=False, quote_value=False, tab_separator=False)
             return_value = value
     
     if as_array:
+        # postgres array are contained within curly braces
         return_value = '{' + return_value + '}'
     return return_value
+
+def verify_file(passed_type, schema_name):
+    """read lines in file and compare to rows in postgres 
+       uses line combining ReadColumnFile"""
+    sql_sync = SqlSync(schema_name)
+    Session = sessionmaker()
+    sess = Session(bind=sql_sync.sql_sync_connection)
+    sql_table = sql_sync.get_table(passed_type)
+    sql_count = sess.query(sql_table).count()
+    filename = config['DATA_PATH'] + config[passed_type.upper()]
+    file_count = count_lines_file(filename)
+    print sql_count, file_count, filename
+    if file_count == sql_count:
+        logger.info('verify on {} succeeded, {} rows'.format(passed_type, sql_count))
+    else:
+        logger.info('verify on {} failed, {} sql rows, {} file rows'.format(passed_type, sql_count, file_count))
+
+
+
+def count_lines_file(filename):
+    count = 0
+    with open(filename, "r") as f:
+        reader = ColumnFileReader(filename)
+        for bibcode, value in reader:
+            count += 1
+    return count
 
             
 
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
+    parser.add_argument('--schemaName', default='public', help='name of the postgres schema, needed for verify')
     parser.add_argument('command', help='ingest|verify')
 
     array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad')
     quote_values = ('author','simbad','grants')
     tab_separated_values = ('author')
-    all_values = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
+    all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                   'reader', 'download', 'reference', 'reads')
     
     args = parser.parse_args()
@@ -165,7 +205,7 @@ def main():
     
     if args.command == 'ingest' and args.fileType == 'all':
         # all is only useful for testing, sending output to the console
-        for t in all_values:
+        for t in all_types:
             print
             print t
             process_file(t, t in array_types, t in quote_values, 
@@ -173,6 +213,11 @@ def main():
     elif args.command == 'ingest' and args.fileType:
         process_file(args.fileType, args.fileType in array_types, args.fileType in quote_values, 
                      args.fileType in tab_separated_values)
+    elif args.command == 'verify' and args.fileType == 'all':
+        for t in all_types:
+            verify_file(t, args.schemaName)
+    elif args.command == 'verify' and args.fileType:
+        verify_file(args.fileType, args.schemaName)
 
     logger.info('completed columnFileIngest with {}, {}'.format(args.command, args.fileType))
 

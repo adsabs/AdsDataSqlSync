@@ -88,8 +88,8 @@ class SqlSync:
                      Column('norm_cites', Integer),
                      schema=self.schema_name) 
 
-    def get_readers_table(self):
-        return Table('readers', meta,
+    def get_reader_table(self):
+        return Table('reader', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('readers', ARRAY(String)),
                      schema=self.schema_name) 
@@ -152,6 +152,12 @@ class SqlSync:
                      Column('reference', ARRAY(String)),
                      schema=schema_name,
                      extend_existing=True)
+
+    def get_table(self, table_name):
+        method_name = "get_" + table_name + "_table"
+        method = getattr(self, method_name)
+        table = method()
+        return table
 
 
     def get_row_view(self, bibcode):
