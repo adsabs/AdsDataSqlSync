@@ -1,5 +1,6 @@
 
 import sys
+import re
 import argparse
 import utils
 
@@ -14,6 +15,7 @@ class ColumnFileReader:
         self.file_descriptor = open(path, 'r')
         self.bibcode_length = 19
         self.as_array = as_array
+        self.regex = re.compile("^[0-9 \t]+$")
 
     def __iter__(self):
         return self
@@ -30,7 +32,11 @@ class ColumnFileReader:
             bibcode = line[:self.bibcode_length]
         value = line[len(bibcode)+1 : -1]
         if (self.as_array):
-            value = [value]
+            if self.regex.match(value):
+                # here on array of numbers, like reads or downloads, not grants
+                value = value.split('\t')
+            else:
+                value = [value]
 
         match = self._bibcode_match(bibcode)
         if match and isinstance(value, str):
@@ -39,7 +45,6 @@ class ColumnFileReader:
             line = self.file_descriptor.readline()
             value.append(line[self.bibcode_length+1:-1])
             match = self._bibcode_match(bibcode)
-        # print 'returning', bibcode,
         return bibcode, value
 
     def _bibcode_match(self, bibcode):
@@ -60,12 +65,16 @@ def init(passed_config=None):
     global logger
     logger = utils.setup_logging(config['LOG_FILENAME'], 'ColumnFileIngest', config['LOGGING_LEVEL'])
 
+
 def process_file(passed_type, as_array=False, quote_value=False, tab_separator=False):
     """procesed the column file for the provided type
     other parameters indicate how to process the data
     as_array: should values be read in as an array and output to sql as an array
-    quote_value: should individual values sent to sql be in quotes.  we don't quote bibcode, but we do names of authors
-    tab_separator: is the tab a separator, yes for authors, no for grants
+      for example, downloads and grants are an array while relevance has several distinct values but isn't an array
+    quote_value: should individual values sent to sql be in quotes.  
+      for example, we don't quote bibcode, but we do names of authors
+    tab_separator: is the tab a separator in the input data
+      for example, yes for authors, no for grants
     """
     count = 0
     max_rows = config['MAX_ROWS']
@@ -82,17 +91,15 @@ def process_file(passed_type, as_array=False, quote_value=False, tab_separator=F
                 continue  # we have seen a bad line in the file
             if passed_type == 'canonical':
                 value = str(count)
-                #value = clean_bibcode
-                #clean_bibcode = str(count)
             elif (passed_type == 'refereed'):
                 value = 'T'
             else:
                 value = process_value(value, as_array, quote_value, tab_separator)
             print clean_bibcode + '\t' + value
             if count % 100000 == 0:
-                logger.info(str(count))
+                logger.debug('columnFileIngest processing {}, count = {}'.format(passed_type, str(count)))
 
-    logger.info('in columnFileIngest, processed {}, contained {} lines'.format(filename, count))
+    logger.info('columnFileIngest, processed {}, contained {} lines'.format(filename, count))
 
 
 def process_value(value, as_array=False, quote_value=False, tab_separator=False):
@@ -102,6 +109,10 @@ def process_value(value, as_array=False, quote_value=False, tab_separator=False)
     return_value = ''
     if tab_separator and isinstance(value, list) and len(value) == 1:
         value = value[0]
+    output_separator = ','
+    if (as_array == False):
+        output_separator = '\t'
+
     if isinstance(value, str) and '\t' in value:
         # tab separator in string means we need to create a sql array
         values = value.split('\t')
@@ -112,7 +123,7 @@ def process_value(value, as_array=False, quote_value=False, tab_separator=False)
             if len(return_value) == 0:
                 return_value = v
             else:
-                return_value += ',' + v
+                return_value += output_separator + v
                 
     elif isinstance(value, list):
         # array of values to conver to sql 
@@ -123,7 +134,7 @@ def process_value(value, as_array=False, quote_value=False, tab_separator=False)
             if len(return_value) == 0:
                 return_value = v 
             else:
-                return_value += ',' + v
+                return_value += output_separator + v
     elif isinstance(value, str):
         if quote_value:
             return_value = '"' + value + '"'
@@ -141,7 +152,7 @@ def main():
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
     parser.add_argument('command', help='ingest|verify')
 
-    array_types = ('download', 'reads', 'author', 'reference', 'relevance', 'grants', 'citation', 'reader', 'simbad')
+    array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad')
     quote_values = ('author','simbad','grants')
     tab_separated_values = ('author')
     all_values = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
@@ -155,6 +166,8 @@ def main():
     if args.command == 'ingest' and args.fileType == 'all':
         # all is only useful for testing, sending output to the console
         for t in all_values:
+            print
+            print t
             process_file(t, t in array_types, t in quote_values, 
                          t in tab_separated_values)
     elif args.command == 'ingest' and args.fileType:

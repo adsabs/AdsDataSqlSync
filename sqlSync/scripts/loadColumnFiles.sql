@@ -26,70 +26,52 @@ delete from :rowViewSchema.Relevance;
 delete from :rowViewSchema.Reader;
 delete from :rowViewSchema.Download;
 delete from :rowViewSchema.Reads;
-
+delete from :rowViewSchema.Reference;
 
 
 \set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType canonical ingest' '\''
-\set schema_table '\'' :rowViewSchema '.Canonical' '\''
+\set schema_table '\'' :rowViewSchema '.canonical' '\''
 select process_file2(:schema_table, :python_command);
 
----------------------------------------------------------------------------
--- \set python_filename '\'' :python_root '/canonicalIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/bibcodes.list.can' '\''		 --
--- \set schema_table '\'' :row_view_schema '.Canonical' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
---
--- \set python_filename '\'' :python_root '/authorIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/facet_authors/all.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Author' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/refereedIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/refereed/all.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Refereed' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/simpleIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/simbad/simbad_objects.tab' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Simbad' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/simpleIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/grants/all.links' '\''		 --
--- \set schema_table '\'' :row_view_schema '.Grants' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/simpleIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/citation/all.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Citation' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/relevanceIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/relevance/docmetrics.tab' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Relevance' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/simpleIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/alsoread_bib/all.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Reader' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/downloadIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/reads/downloads.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Download' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/downloadIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/reads/all.links' '\''		 --
--- \set schema_table '\'' :row_view_schema '.Reads' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
--- 									 --
--- \set python_filename '\'' :python_root '/simpleIngest.py' '\''	 --
--- \set data_filename '\'' :data_root '/reference/all.links' '\''	 --
--- \set schema_table '\'' :row_view_schema '.Reference' '\''		 --
--- select process_file(:schema_table, :python_filename, :data_filename); --
----------------------------------------------------------------------------
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType author ingest' '\''
+\set schema_table '\'' :rowViewSchema '.author' '\''
+select process_file2(:schema_table, :python_command);
 
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType refereed ingest' '\''
+\set schema_table '\'' :rowViewSchema '.refereed' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType simbad ingest' '\''
+\set schema_table '\'' :rowViewSchema '.simbad' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType grants ingest' '\''
+\set schema_table '\'' :rowViewSchema '.grants' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType citation ingest' '\''
+\set schema_table '\'' :rowViewSchema '.citation' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType relevance ingest' '\''
+\set schema_table '\'' :rowViewSchema '.relevance' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reader ingest' '\''
+\set schema_table '\'' :rowViewSchema '.reader' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType download ingest' '\''
+\set schema_table '\'' :rowViewSchema '.download' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reads ingest' '\''
+\set schema_table '\'' :rowViewSchema '.reads' '\''
+select process_file2(:schema_table, :python_command);
+
+\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reference ingest' '\''
+\set schema_table '\'' :rowViewSchema '.reference' '\''
+select process_file2(:schema_table, :python_command);
 
 
 
