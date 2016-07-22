@@ -66,8 +66,8 @@ def setup_logging(file_, name_, level='WARN'):
         os.makedirs(fn_path)
     fn = os.path.join(fn_path, '{0}.log'.format(name_))
     rfh = ConcurrentRotatingFileHandler(filename=fn,
-                                                                        maxBytes=2097152,
-                                                                        backupCount=5,
+                                        maxBytes=2097152,
+                                        backupCount=5,
                                         mode='a',
                                         encoding='UTF-8')  # 2MB file                                   
     rfh.setFormatter(formatter)

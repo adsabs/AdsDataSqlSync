@@ -29,47 +29,47 @@ delete from :rowViewSchema.Reads;
 delete from :rowViewSchema.Reference;
 
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType canonical ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType canonical ingest' '\''
 \set schema_table '\'' :rowViewSchema '.canonical' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType author ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType author ingest' '\''
 \set schema_table '\'' :rowViewSchema '.author' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType refereed ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType refereed ingest' '\''
 \set schema_table '\'' :rowViewSchema '.refereed' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType simbad ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType simbad ingest' '\''
 \set schema_table '\'' :rowViewSchema '.simbad' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType grants ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType grants ingest' '\''
 \set schema_table '\'' :rowViewSchema '.grants' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType citation ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType citation ingest' '\''
 \set schema_table '\'' :rowViewSchema '.citation' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType relevance ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType relevance ingest' '\''
 \set schema_table '\'' :rowViewSchema '.relevance' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reader ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType reader ingest' '\''
 \set schema_table '\'' :rowViewSchema '.reader' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType download ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType download ingest' '\''
 \set schema_table '\'' :rowViewSchema '.download' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reads ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType reads ingest' '\''
 \set schema_table '\'' :rowViewSchema '.reads' '\''
 select process_file2(:schema_table, :python_command);
 
-\set python_command '\'' 'python ' :pythonRoot '/columnFileIngest.py --fileType reference ingest' '\''
+\set python_command '\'' 'python ' :pythonRoot 'app.py --fileType reference ingest' '\''
 \set schema_table '\'' :rowViewSchema '.reference' '\''
 select process_file2(:schema_table, :python_command);
 

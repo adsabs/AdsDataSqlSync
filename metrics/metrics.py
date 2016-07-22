@@ -91,7 +91,7 @@ class Metrics():
     def save(self, values_dict):
         """buffered save does actual save every 100 records, call flush at end of processing"""
 
-        bibcode = values_dict.get('bibcode', None)
+        bibcode = values_dict['bibcode']
         if bibcode is None:
             print 'error: cannont save metrics data that does not have a bibcode'
             return
@@ -239,9 +239,13 @@ class Metrics():
         metrics_dict['reads'] = row_view['reads']
         metrics_dict['downloads'] = row_view['downloads']
         
-        metrics_dict['citation_num'] = len(row_view.get('citations', [])
-        metrics_dict['author_num'] = max(len(row_view.get('authors'),[]),1)
-        metrics_dict['reference_num'] = len(row_view.get('reference'),[]) 
+        metrics_dict['citation_num'] = len(row_view['citations']) if row_view['citations'] else 0
+        metrics_dict['author_num'] = max(len(row_view['authors']),1) if row_view['authors'] else 1
+        metrics_dict['reference_num'] = len(row_view['reference']) if row_view['reference'] else 0
+
+        #metrics_dict['citation_num'] = len(row_view.get('citations', [])
+        #metrics_dict['author_num'] = max(len(row_view.get('authors'),[]),1)
+        #metrics_dict['reference_num'] = len(row_view.get('reference'),[]) 
 
         # next deal with papers that cite the current one
         # compute histogram, normalized values of citations
