@@ -12,17 +12,23 @@ This includes citations, 90-day readershp (called alsoreads),
 historical readership (called reads), simbad object ids, refereed
 status, downloads, etc.
 
-The top level script that starts with the column/flat files and ends
-up populating a metrics database is scripts/fromScratch.sh.  It
-invokes sql scripts, shell scripts and python code to process the
-data.  Each column file is initially read via a Postgres command into
-a separate table.  This Postgres command ('copy from program') invokes a
-Python script to perform some minor but necessary formatting.  After
-all the column files are populated, a sql command is run to generate a
-join across all the tables (via a materialized view).  This row
-view is available for additional processing steps.  For example, the
-Python code metrics/metrics.py reads converts each row in the
-materialized view into a row in the metrics database.
+Ingest operations are controls by app.py.  It supports
+creating/dropping schemas and database tables, loading the column
+files and creating a sql based row view and populating a metrics
+database.  Via the config file one can specify the location of the
+column file directory, names of each column file and whether to ingest
+all the data or just a subset.  
+
+Each column file is initially read via a Postgres command into
+a separate table using the 'copy from program' command.  Code in
+app.py runs this Postgres command.  That command includes another
+invocation of the app.py script (with different arguments) to perform
+some minor but necessary formatting of the column files.  After all
+the column files are populated, a join across all the tables (via a
+materialized view) creates a unified row view is available for
+additional processing steps.  For example, the Python code
+metrics/metrics.py reads converts each row in the materialized view
+into a row in the metrics database.  
 
 This repository also contains a script to generate test data:
 test/scripts/createTestColumnFiles.sh.  It takes thress arguments.
