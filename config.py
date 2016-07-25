@@ -7,6 +7,9 @@ LOGGING_LEVEL = 'DEBUG'
 
 DATA_PATH = '/SpacemanSteve/tmp/columnFiles3/'
 
+# where to read column files into
+INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
+
 #PYTHON_PATH = '/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/'
 
 DOWNLOAD = 'reads/downloads.links'

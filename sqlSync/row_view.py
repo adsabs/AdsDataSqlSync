@@ -16,6 +16,7 @@ import time
 import sys
 import argparse
 import os
+import logging
 
 #from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
@@ -25,61 +26,92 @@ Base = declarative_base()
 # part of sql sync
 
 #sql_sync_engine = create_engine('postgresql://postgres@localhost:5432/postgres', echo=False)
-meta = MetaData()
+
 #sql_sync_connection = sql_sync_engine.connect()
 
 class SqlSync:
 
-    def __init__(self, schema_name):
-        self.schema_name = schema_name
-        
-        self.sql_sync_engine = create_engine('postgresql://postgres@localhost:5432/postgres', echo=False)
-        self.sql_sync_connection = self.sql_sync_engine.connect()
-        self.row_view_table = self.get_row_view_table()
+    all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
+                  'reader', 'download', 'reference', 'reads')
 
-    def get_delta_table(self):
+    def __init__(self, schema_name, 
+                 passed_config={'INGEST_DATABASE': 'postgresql://postgres@localhost:5432/postgres'}):
+        self.schema_name = schema_name
+        self.config.update(utils.load_config())
+        if passed_config:
+            self.config.update(passed_config)
+
+        self.sql_sync_engine = create_engine(, echo=False)
+        self.sql_sync_connection = self.sql_sync_engine.connect()
+        self.meta = MetaData()
+        self.row_view_table = self.get_row_view_table()
+        
+        if ('LOG_FILENAME' in self.config):
+            self.logger = utils.setup_logging(config['LOG_FILENAME'], 
+                                              'ColumnFileIngest', config['LOGGING_LEVEL'])
+        else:
+            self.logger = logging('rowView.log')
+
+    def create_column_tables(self):
+        temp_meta = MetaData()
+        row_view_table = self.get_row_view_table()
+        for t in SqlSync.all_type:
+            table = get_table(t, temp_meta)
+        temp_meta.create_all(self.sql_sync_engine)
+        self.logger.info('row_view, created database tables for column files')
+        
+
+    def drop_column_tables(self):
+        temp_meta = MetaData()
+        row_view_table = self.get_row_view_table()
+        for t in SqlSync.all_type:
+            table = get_table(t, temp_meta)
+        temp_meta.drop_all(self.sql_sync_engine)
+        self.logger.info('row_view, dropped database tables for column files')
+
+    def get_delta_table(self, meta=self.meta):
         return Table('ChangedRows', meta,
                      Column('bibcode', String, primary_key=True),
                      schema=self.schema_name) 
 
-    def get_canonical_table(self):
+    def get_canonical_table(self, meta=self.meta):
         return Table('canonical', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('id', Integer),
                      schema=self.schema_name) 
 
-    def get_author_table(self):
+    def get_author_table(self, meta=self.meta):
         return Table('author', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('authors', ARRAY(String)),
                      extend_existing=True,
                      schema=self.schema_name) 
 
-    def get_refereed_table(self):
+    def get_refereed_table(self, meta=self.meta):
         return Table('refereed', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('refereed', Boolean),
                      schema=self.schema_name)
 
-    def get_simbad_table(self):
+    def get_simbad_table(self, meta=self.meta):
         return Table('simbad', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('simbad_objects', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_grants_table(self):
+    def get_grants_table(self, meta=self.meta):
         return Table('grants', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('grants', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_citation_table(self):
+    def get_citation_table(self, meta=self.meta):
         return Table('citation', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('citations', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_relevance_table(self):
+    def get_relevance_table(self, meta=self.meta):
         return Table('relevance', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('boost', Float),
@@ -88,32 +120,32 @@ class SqlSync:
                      Column('norm_cites', Integer),
                      schema=self.schema_name) 
 
-    def get_reader_table(self):
+    def get_reader_table(self, meta=self.meta):
         return Table('reader', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('readers', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_reads_table(self):
+    def get_reads_table(self, meta=self.meta):
         return Table('reads', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('reads', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_download_table(self):
+    def get_download_table(self, meta=self.meta):
         return Table('download', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('downloads', ARRAY(String)),
                      schema=self.schema_name) 
 
-    def get_reference_table(self):
+    def get_reference_table(self, meta=self.meta):
         return Table('reference', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('reference', ARRAY(String)),
                      schema=self.schema_name) 
 
 
-    def get_row_view_table(self):
+    def get_row_view_table(self, meta=self.meta):
         return Table('rowviewm', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('id', Integer),
@@ -133,7 +165,7 @@ class SqlSync:
                      schema=self.schema_name,
                      extend_existing=True)
 
-    def get_changed_rows_table(self, table_name, schema_name):
+    def get_changed_rows_table(self, table_name, schema_name, meta=self.meta):
         return Table('table_name', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('id', Integer),
@@ -153,10 +185,10 @@ class SqlSync:
                      schema=schema_name,
                      extend_existing=True)
 
-    def get_table(self, table_name):
+    def get_table(self, table_name, meta=self.meta):
         method_name = "get_" + table_name + "_table"
         method = getattr(self, method_name)
-        table = method()
+        table = method(meta)
         return table
 
 

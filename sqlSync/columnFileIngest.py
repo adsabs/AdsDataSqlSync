@@ -195,8 +195,8 @@ def main():
     array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad')
     quote_values = ('author','simbad','grants')
     tab_separated_values = ('author')
-    all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
-                  'reader', 'download', 'reference', 'reads')
+    #all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
+    #              'reader', 'download', 'reference', 'reads')
     
     args = parser.parse_args()
     init()
@@ -205,7 +205,7 @@ def main():
     
     if args.command == 'ingest' and args.fileType == 'all':
         # all is only useful for testing, sending output to the console
-        for t in all_types:
+        for t in SqlSync.all_types:
             print
             print t
             process_file(t, t in array_types, t in quote_values, 
@@ -214,7 +214,7 @@ def main():
         process_file(args.fileType, args.fileType in array_types, args.fileType in quote_values, 
                      args.fileType in tab_separated_values)
     elif args.command == 'verify' and args.fileType == 'all':
-        for t in all_types:
+        for t in SqlSync.all_types:
             verify_file(t, args.schemaName)
     elif args.command == 'verify' and args.fileType:
         verify_file(args.fileType, args.schemaName)
