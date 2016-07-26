@@ -36,7 +36,7 @@ class SqlSync:
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                   'reader', 'download', 'reference', 'reads')
 
-    def __init__(self, schema_name, passed_config):
+    def __init__(self, schema_name, passed_config=None):
         self.schema_name = schema_name
         self.config = {}
         self.config.update(utils.load_config())
@@ -56,7 +56,6 @@ class SqlSync:
     def create_column_tables(self):
         self.sql_sync_engine.execute(CreateSchema(self.schema_name))
         temp_meta = MetaData()
-        row_view_table = self.get_row_view_table(temp_meta)
         for t in SqlSync.all_types:
             table = self.get_table(t, temp_meta)
         temp_meta.create_all(self.sql_sync_engine)
@@ -65,13 +64,26 @@ class SqlSync:
 
     def drop_column_tables(self):
         temp_meta = MetaData()
-        row_view_table = self.get_row_view_table(temp_meta)
         for t in SqlSync.all_types:
             table = self.get_table(t, temp_meta)
         temp_meta.drop_all(self.sql_sync_engine)
         self.sql_sync_engine.execute(DropSchema(self.schema_name))
         self.logger.info('row_view, dropped database tables for column files')
 
+    def create_joined_rows(self):
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        sql_command = SqlSync.create_view_sql.format(self.schema_name)
+        sess.execute(sql_command)
+        sess.commit()
+        
+        sql_command = 'create index on {}.RowViewM (bibcode)'.format(self.schema_name)
+        sess.execute(sql_command)
+        sql_command = 'create index on {}.RowViewM (id)'.format(self.schema_name)
+        sess.execute(sql_command)
+        sess.commit()
+        sess.close()
+        
     def get_delta_table(self, meta=None):
         if meta is None:
             meta = self.meta
@@ -152,7 +164,7 @@ class SqlSync:
             meta = self.meta
         return Table('reads', meta,
                      Column('bibcode', String, primary_key=True),
-                     Column('reads', ARRAY(String)),
+                     Column('reads', ARRAY(Integer)),
                      schema=self.schema_name) 
 
     def get_download_table(self, meta=None):
@@ -160,7 +172,7 @@ class SqlSync:
             meta = self.meta
         return Table('download', meta,
                      Column('bibcode', String, primary_key=True),
-                     Column('downloads', ARRAY(String)),
+                     Column('downloads', ARRAY(Integer)),
                      schema=self.schema_name) 
 
     def get_reference_table(self, meta=None):
@@ -188,8 +200,8 @@ class SqlSync:
                      Column('read_count', Integer),
                      Column('norm_cites', Integer),
                      Column('readers', ARRAY(String)),
-                     Column('downloads', ARRAY(String)),
-                     Column('reads', ARRAY(String)),
+                     Column('downloads', ARRAY(Integer)),
+                     Column('reads', ARRAY(Integer)),
                      Column('reference', ARRAY(String)),
                      schema=self.schema_name,
                      extend_existing=True)
@@ -264,6 +276,32 @@ class SqlSync:
             for line in f:
                 count += 1
         return count
+
+    create_view_sql =     \
+        'CREATE MATERIALIZED VIEW {0}.RowViewM AS  \
+         select bibcode,  \
+	      id,         \
+              coalesce(authors, ARRAY[]::text[]) as authors,    \
+              coalesce(refereed, FALSE) as refereed,            \
+              coalesce(simbad_objects, ARRAY[]::text[]) as simbad_objects,  \
+              coalesce(grants, ARRAY[]::text[]) as grants,      \
+              coalesce(citations, ARRAY[]::text[]) as citations,\
+              coalesce(boost, 0) as boost,                      \
+              coalesce(citation_count, 0) as citation_count,    \
+              coalesce(read_count, 0) as read_count,            \
+              coalesce(norm_cites, 0) as norm_cites,            \
+              coalesce(readers, ARRAY[]::text[]) as readers,    \
+              coalesce(downloads, ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) as downloads, \
+              coalesce(reference, ARRAY[]::text[]) as reference, \
+              coalesce(reads, ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) as reads \
+       from {0}.Canonical natural left join {0}.Author \
+       natural left join {0}.Refereed                 \
+       natural left join {0}.Simbad natural left join {0}.Grants \
+       natural left join {0}.Citation                 \
+       natural left join {0}.Relevance natural left join {0}.Reader \
+       natural left join {0}.Download natural left join {0}.Reads   \
+       natural left join {0}.Reference;' 
+
 
 
 

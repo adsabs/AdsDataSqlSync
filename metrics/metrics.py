@@ -4,6 +4,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from sqlalchemy import *
 from sqlalchemy.sql import select
@@ -15,6 +16,9 @@ import time
 import sys
 import json
 import argparse
+import logging
+
+import utils
 
 sys.path.append('/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/sqlSync')
 from row_view import SqlSync
@@ -28,16 +32,27 @@ meta = MetaData()
 
 class Metrics():
 
-    def __init__(self, metrics_schema='metrics', metrics_database='postgresql://postgres@localhost:5432/postgres',
-                 from_scratch=False, copy_from_program=False):
-        self.table = self.get_metric_table(metrics_schema)
+    def __init__(self, metrics_schema='metrics', passed_config=None):
+        #metrics_database='postgresql://postgres@localhost:5432/postgres'
+        #         from_scratch=False, copy_from_program=False):
+        self.config = {}
+        self.config.update(utils.load_config())
+        if passed_config:
+            self.config.update(passed_config)
+
+        self.meta = MetaData()
         self.schema = metrics_schema
-        self.database = metrics_database
+        self.table = self.get_metrics_table()
+        self.database = self.config.get('INGEST_DATABASE', 'postgresql://postgres@localhost:5432/postgres')
         self.engine = create_engine(self.database)
         self.connection = self.engine.connect()
-        self.from_scratch = from_scratch
-        self.copy_from_program = copy_from_program
+        # if true, don't bother checking if metrics database has bibcode, assume db insert
+        self.from_scratch = self.config.get('FROM_SCRATCH', True)
+        # if true, send data to stdout
+        self.copy_from_program = self.config.get('COPY_FROM_PROGRAM', True)
         self.upserts = []
+
+        # sql command to update a row in the metrics table
         self.u = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
             values ({'refereed': bindparam('refereed'),
                      'rn_citations': bindparam('rn_citations'),
@@ -55,8 +70,11 @@ class Metrics():
 
         self.tmp_count = 0
         self.tmp_update_buffer = []
+        self.logger = logging.getLogger('AdsDataSqlSync')
 
-    def get_metric_table(self, schema_name):
+    def get_metrics_table(self, meta=None):
+        if meta is None:
+            meta = self.meta
         return Table('metrics', meta,
                      Column('id', Integer, primary_key=True),
                      Column('bibcode', String, nullable=False, index=True, unique=True),
@@ -75,8 +93,25 @@ class Metrics():
                      Column('author_num', Integer),
                      Column('an_refereed_citations', postgresql.REAL),
                      Column('modtime', DateTime),
-                     schema=schema_name,
-                     extend_existing=True) 
+                     schema=self.schema)
+    #extend_existing=True) 
+
+    def create_metrics_table(self):
+        self.engine.execute(CreateSchema(self.schema))
+        temp_meta = MetaData()
+        table = self.get_metrics_table(temp_meta)
+        temp_meta.create_all(self.engine)
+        self.logger.info('metrics.py, metrics table created')
+
+
+    def drop_metrics_table(self):
+        temp_meta = MetaData()
+        table = self.get_metrics_table(temp_meta)
+        temp_meta.drop_all(self.engine)
+        self.engine.execute(DropSchema(self.schema))
+        self.logger.info('metrics.py, metrics table dropped')
+
+
 
     def test_query(self, bibcode):
         q ='select refereed,array_length(reference,1),bibcode from ingest.RowViewM where bibcode = ANY ((select citations from ingest.RowViewM where bibcode=\'' + bibcode + '\')::text[]);'
@@ -208,6 +243,8 @@ class Metrics():
                 metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
                 self.save(metrics_dict)
                 count += 1
+                if count % 100000 == 0:
+                    self.logger.debug('metrics.py, metrics count = {}'.format(count))
                 if end_offset > 0 and end_offset <= (count + start_offset):
                     # here if we processed the last requested row
                     self.flush()
