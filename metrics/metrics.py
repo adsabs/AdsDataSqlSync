@@ -43,7 +43,7 @@ class Metrics():
         self.meta = MetaData()
         self.schema = metrics_schema
         self.table = self.get_metrics_table()
-        self.database = self.config.get('INGEST_DATABASE', 'postgresql://postgres@localhost:5432/postgres')
+        self.database = self.config.get('METRICS_DATABASE', 'postgresql://postgres@localhost:5432/postgres')
         self.engine = create_engine(self.database)
         self.connection = self.engine.connect()
         # if true, don't bother checking if metrics database has bibcode, assume db insert

@@ -7,17 +7,36 @@ This library:
   * Uses the row view to populate a Metrics database
   * And, will include several RabbitMQ workers for further processing
 
-This library processes mostly data that does not come from publishers.
-This includes citations, 90-day readershp (called alsoreads),
-historical readership (called reads), simbad object ids, refereed
-status, downloads, etc.
+This library processes mostly non-publisher data.  This includes
+citations, 90-day readershp (called alsoreads), historical readership
+(called reads), simbad object ids, refereed status, downloads, etc.
 
-Ingest operations are controls by app.py.  It supports
-creating/dropping schemas and database tables, loading the column
-files and creating a sql based row view and populating a metrics
-database.  Via the config file one can specify the location of the
-column file directory, names of each column file and whether to ingest
-all the data or just a subset.  
+Ingest operations are controled by app.py.  It supports the follow
+commands:
+    * createIngestTables: create sql column tables
+    * dropIngestTables: drop sql column tables
+    * ingest: load column files into column tables
+    * verify: verify rows in column files matches rows in column tables
+    * createJoinedRows: create sql join across all column tables 
+    * createMetricsTable: create table for metrics data
+    * dropMetricsTable: drop table for metrics data
+    * populateMetricsTable: write Metrics records
+    * ingestMeta: execute sql copy from program statement to run ingest command
+    * populateMetricsTableMeta: execute sql copy from program statement to run populateMetricsTable command
+
+and the following arguments:
+    * --fileType: used by ingest to specify column file (reads,
+    downloads, etc.) to load.  Can be 'all'.
+    * --rowViewSchemaName:
+    * --metricsSchemaName:
+
+The config file supports:
+    * DATA_PATH: root directory for column files
+    * INGEST_DATABASE: database connection string
+    * METRICS_DATABASE: database connection string
+    file name for each type of file: for example READS = 'reads/all.links'
+    * MAX_ROWS: set to positive number to ingest only part of the column files
+
 
 Each column file is initially read via a Postgres command into
 a separate table using the 'copy from program' command.  Code in

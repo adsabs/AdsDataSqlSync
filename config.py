@@ -27,4 +27,4 @@ CANONICAL = 'bibcodes.list.can'
 # number of rows of column file to process
 # set to a small number during testing to ingest just a little data quickly
 # -1 means process all rows
-MAX_ROWS = 20
+MAX_ROWS = -1

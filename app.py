@@ -18,8 +18,9 @@ def main():
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
     parser.add_argument('--rowViewSchemaName', default='public', help='name of the postgres schema, needed for verify')
     parser.add_argument('--metricsSchemaName', default='public', help='name of the postgres schema, needed for verify')
-    parser.add_argument('command', default='help', help='ingest | verify | createIngestTables | dropIngestTables | \
-createJoinedRows | createMetricsTable | dropMetricsTable')
+    parser.add_argument('command', default='help', 
+                        help='ingest | verify | createIngestTables | dropIngestTables | \
+createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta')
 
     args = parser.parse_args()
 
