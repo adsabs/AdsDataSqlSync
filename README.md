@@ -25,16 +25,14 @@ commands:
     * populateMetricsTableMeta: execute sql copy from program statement to run populateMetricsTable command
 
 and the following arguments:
-    * --fileType: used by ingest to specify column file (reads,
-    downloads, etc.) to load.  Can be 'all'.
+    * --fileType: used by ingest to specify column file (reads, downloads, etc.) to load.  Can be 'all'.
     * --rowViewSchemaName:
     * --metricsSchemaName:
 
 The config file supports:
     * DATA_PATH: root directory for column files
     * INGEST_DATABASE: database connection string
-    * METRICS_DATABASE: database connection string
-    file name for each type of file: for example READS = 'reads/all.links'
+    * METRICS_DATABASE: database connection string file name for each type of file: for example READS = 'reads/all.links'
     * MAX_ROWS: set to positive number to ingest only part of the column files
 
 
