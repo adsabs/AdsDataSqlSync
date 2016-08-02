@@ -16,14 +16,15 @@ config = {}
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
-    parser.add_argument('--rowViewSchemaName', default='public', help='name of the postgres schema, needed for verify')
-    parser.add_argument('--metricsSchemaName', default='public', help='name of the postgres schema, needed for verify')
+    parser.add_argument('--rowViewSchemaName', default='public', help='name of the postgres row view schema')
+    parser.add_argument('--metricsSchemaName', default='public', help='name of the postgres metrics schema')
+    parser.add_argument('--rowViewBaselineSchemaName', default=None, 
+                        help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | \
-createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta')
+createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows')
 
     args = parser.parse_args()
-
 
     config.update(utils.load_config())
 
@@ -104,6 +105,9 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+    elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
 
     else:
         print 'app.py: illegal command', args.command

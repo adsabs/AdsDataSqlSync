@@ -83,6 +83,15 @@ class SqlSync:
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+    
+    def create_delta_rows(self, baseline_schema):
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        sql_command = SqlSync.create_changed_sql.format(self.schema_name, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        sess.close()
+        
         
     def get_delta_table(self, meta=None):
         """ delta table holds list of bibcodes that differ between two row views"""
