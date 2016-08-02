@@ -85,6 +85,7 @@ class SqlSync:
         sess.close()
         
     def get_delta_table(self, meta=None):
+        """ delta table holds list of bibcodes that differ between two row views"""
         if meta is None:
             meta = self.meta
         return Table('ChangedRows', meta,
@@ -301,6 +302,26 @@ class SqlSync:
        natural left join {0}.Relevance natural left join {0}.Reader \
        natural left join {0}.Download natural left join {0}.Reads   \
        natural left join {0}.Reference;' 
+
+    create_changed_sql = \
+        'create materialized view {0}.ChangedRowsM as \
+         select {0}.RowViewM.bibcode, {0}.RowViewM.id \
+         from {0}.RowViewM,{1}.RowViewM \
+         where {0}.RowViewM.bibcode={1}.RowViewM.bibcode  \
+           and {0}.RowViewM.authors!={1}.RowViewM.authors \
+	   or {0}.RowViewM.refereed!={1}.RowViewM.refereed \
+	   or {0}.RowViewM.simbad_objects!={1}.RowViewM.simbad_objects \
+	   or {0}.RowViewM.grants!={1}.RowViewM.grants \
+	   or {0}.RowViewM.citations!={1}.RowViewM.citations \
+	   or {0}.RowViewM.boost!={1}.rowViewM.boost \
+	   or {0}.RowViewM.norm_cites!={1}.RowViewM.norm_cites \
+	   or {0}.RowViewM.citation_count!={1}.RowViewM.citation_count \
+	   or {0}.RowViewM.read_count!={1}.RowViewM.read_count \
+	   or {0}.RowViewM.readers!={1}.RowViewM.readers \
+	   or {0}.RowViewM.downloads!={1}.RowViewM.downloads \
+	   or {0}.RowViewM.reads!={1}.RowViewM.reads;'
+
+
 
 
 

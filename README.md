@@ -60,7 +60,7 @@ copy ingestc.author from program 'python app.py --ingest --fileType author';
 That is, Metas invoke a Postgres SQL command that runs a
 python program to obtain new rows to populate a table.  This python
 program is app.py.  In this example, 'python app.py --ingest --fileType
-author' will output pairs of the form bibcode ,array of authors to
+author' will output pairs of the form bibcode, array of authors to
 standard out.  Postgres will take these pairs and make new rows in the
 author table.  This self-referential nature may be confusing, but
 copy from program is the fastest way to bulk ingest data into Postgres.  
