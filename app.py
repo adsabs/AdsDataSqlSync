@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlSync import columnFileIngest
 from sqlSync import row_view
 from metrics import metrics
+from queue import queue
 logger = None
 config = {}
 
@@ -22,7 +23,7 @@ def main():
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | \
-createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows')
+createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | queueChangedBibcodes | initQueue')
 
     args = parser.parse_args()
 
@@ -108,9 +109,15 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
+    elif args.command == 'queueChangedBibcodes' and args.rowViewSchemaName:
+        q = queue.Queue(args.rowViewSchemaName, config)
+        q.add_changed_bibcodes()
+    elif args.command == 'initQueue':
+        q = queue.Queue(None, config)
+        q.init_rabbitmq()
 
     else:
-        print 'app.py: illegal command', args.command
+        print 'app.py: illegal command or missing argument', args.command
 
             
     logger.info('completed columnFileIngest with {}, {}'.format(args.command, args.fileType))

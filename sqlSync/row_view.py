@@ -63,11 +63,12 @@ class SqlSync:
         
 
     def drop_column_tables(self):
-        temp_meta = MetaData()
-        for t in SqlSync.all_types:
-            table = self.get_table(t, temp_meta)
-        temp_meta.drop_all(self.sql_sync_engine)
-        self.sql_sync_engine.execute(DropSchema(self.schema_name))
+        self.sql_sync_engine.execute("drop schema if exists {} cascade".format(self.schema_name))
+        #temp_meta = MetaData()
+        #for t in SqlSync.all_types:
+        #    table = self.get_table(t, temp_meta)
+        #temp_meta.drop_all(self.sql_sync_engine)
+        #self.sql_sync_engine.execute(DropSchema(self.schema_name))
         self.logger.info('row_view, dropped database tables for column files')
 
     def create_joined_rows(self):
@@ -97,7 +98,7 @@ class SqlSync:
         """ delta table holds list of bibcodes that differ between two row views"""
         if meta is None:
             meta = self.meta
-        return Table('ChangedRows', meta,
+        return Table('changedrowsm', meta,
                      Column('bibcode', String, primary_key=True),
                      schema=self.schema_name) 
 
@@ -317,7 +318,7 @@ class SqlSync:
          select {0}.RowViewM.bibcode, {0}.RowViewM.id \
          from {0}.RowViewM,{1}.RowViewM \
          where {0}.RowViewM.bibcode={1}.RowViewM.bibcode  \
-           and {0}.RowViewM.authors!={1}.RowViewM.authors \
+           and ({0}.RowViewM.authors!={1}.RowViewM.authors \
 	   or {0}.RowViewM.refereed!={1}.RowViewM.refereed \
 	   or {0}.RowViewM.simbad_objects!={1}.RowViewM.simbad_objects \
 	   or {0}.RowViewM.grants!={1}.RowViewM.grants \
@@ -328,7 +329,7 @@ class SqlSync:
 	   or {0}.RowViewM.read_count!={1}.RowViewM.read_count \
 	   or {0}.RowViewM.readers!={1}.RowViewM.readers \
 	   or {0}.RowViewM.downloads!={1}.RowViewM.downloads \
-	   or {0}.RowViewM.reads!={1}.RowViewM.reads;'
+	   or {0}.RowViewM.reads!={1}.RowViewM.reads);'
 
 
 

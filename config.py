@@ -28,3 +28,7 @@ CANONICAL = 'bibcodes.list.can'
 # set to a small number during testing to ingest just a little data quickly
 # -1 means process all rows
 MAX_ROWS = -1
+
+RABBITMQ_URL = 'amqp://foo:foo@localhost:5672/'
+RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
+RABBITMQ_ROUTE = 'SolrUpdateRoute'
