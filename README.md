@@ -7,22 +7,68 @@ This library:
   * Uses the row view to populate a Metrics database
   * And, will include several RabbitMQ workers for further processing
 
-This library processes mostly data that does not come from publishers.
-This includes citations, 90-day readershp (called alsoreads),
-historical readership (called reads), simbad object ids, refereed
-status, downloads, etc.
+This library processes mostly non-publisher data.  This includes
+citations, 90-day readershp (called alsoreads), historical readership
+(called reads), simbad object ids, refereed status, downloads, etc.
 
-The top level script that starts with the column/flat files and ends
-up populating a metrics database is scripts/fromScratch.sh.  It
-invokes sql scripts, shell scripts and python code to process the
-data.  Each column file is initially read via a Postgres command into
-a separate table.  This Postgres command ('copy from program') invokes a
-Python script to perform some minor but necessary formatting.  After
-all the column files are populated, a sql command is run to generate a
-join across all the tables (via a materialized view).  This row
-view is available for additional processing steps.  For example, the
-Python code metrics/metrics.py reads converts each row in the
-materialized view into a row in the metrics database.
+Ingest operations are controled by app.py.  It supports the following
+commands:
+  * help
+  * createIngestTables: create sql column tables
+  * dropIngestTables: drop sql column tables
+  * ingest: load column files into column tables
+  * verify: verify rows in column files matches rows in column tables
+  * createJoinedRows: create sql join across all column tables 
+  * createMetricsTable: create table for metrics data
+  * dropMetricsTable: drop table for metrics data
+  * populateMetricsTable: write Metrics records
+  * ingestMeta: execute sql copy from program statement to run ingest command for all file types
+  * populateMetricsTableMeta: execute sql copy from program statement to run populateMetricsTable command
+
+and the following arguments:
+  * --fileType: used by ingest to specify column file (reads, downloads, etc.) to load.  Can be 'all'.
+  * --rowViewSchemaName:
+  * --metricsSchemaName:
+
+The config file supports:
+  * DATA_PATH: root directory for column files
+  * INGEST_DATABASE: database connection string
+  * METRICS_DATABASE: database connection string file name for each type of file: for example READS = 'reads/all.links'
+  * MAX_ROWS: set to positive number to ingest only part of the column files
+
+## Typical Usage
+The following series of commands creates tables to hold the column
+files, ingests the files into Postgres, creates a row view, creates
+the metrics table and finally populates it.  
+```
+python app.py createIngestTables --rowViewSchemaName ingestc
+python app.py ingestMeta --rowViewSchemaName ingestc
+python app.py createJoinedRows --rowViewSchemaName ingestc
+python app.py createMetricsTable --rowViewSchemaName metricsc
+python app.py populateMetricsTableMeta --metricsSchemaName metricsc --rowViewSchemaName ingestc
+```
+
+We use Postgres database schemas to hold separate versions of the
+data.  In the above example, data goes into the schems named IngestC
+and MetricsC.  Data could be loaded into separate databases, but that
+would make comparing data sets more difficult.  
+
+The 'Meta' suffix indicates a command that runs a SQL command like: 
+```
+copy ingestc.author from program 'python app.py --ingest --fileType author';
+```
+That is, Metas invoke a Postgres SQL command that runs a
+python program to obtain new rows to populate a table.  This python
+program is app.py.  In this example, 'python app.py --ingest --fileType
+author' will output pairs of the form bibcode, array of authors to
+standard out.  Postgres will take these pairs and make new rows in the
+author table.  This self-referential nature may be confusing, but
+copy from program is the fastest way to bulk ingest data into Postgres.  
+
+Python code in
+metrics/metrics.py reads converts each row in the materialized view
+into a row in the metrics database.  
+
 
 This repository also contains a script to generate test data:
 test/scripts/createTestColumnFiles.sh.  It takes thress arguments.
