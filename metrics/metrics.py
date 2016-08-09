@@ -21,7 +21,7 @@ import logging
 import utils
 
 sys.path.append('/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/sqlSync')
-from row_view import SqlSync
+from sqlSync import row_view
 
 from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 

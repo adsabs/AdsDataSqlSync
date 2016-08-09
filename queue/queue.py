@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.sql import select
 
 import utils
-from row_view import SqlSync
+from sqlSync import row_view
 
 
 class Queue():
