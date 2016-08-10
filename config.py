@@ -1,6 +1,6 @@
 
 
-LOG_FILENAME = '/proj.adsqb/beer/AdsDataSqlSync/logs/flatFileIngest.log'
+#LOG_FILENAME = 'AdsDataSqlSync/logs/flatFileIngest.log'
 
 # possible values: WARN, INFO, DEBUG                                                                    
 LOGGING_LEVEL = 'DEBUG'

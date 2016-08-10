@@ -18,12 +18,11 @@ import json
 import argparse
 import logging
 
+import row_view
 import utils
 
-sys.path.append('/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/sqlSync')
-from sqlSync import row_view
 
-from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
+#from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
 Base = declarative_base()
 meta = MetaData()
@@ -105,10 +104,11 @@ class Metrics():
 
 
     def drop_metrics_table(self):
-        temp_meta = MetaData()
-        table = self.get_metrics_table(temp_meta)
-        temp_meta.drop_all(self.engine)
-        self.engine.execute(DropSchema(self.schema))
+        self.engine.execute("drop schema if exists {} cascade".format(self.schema))
+        #temp_meta = MetaData()
+        #table = self.get_metrics_table(temp_meta)
+        #temp_meta.drop_all(self.engine)
+        #self.engine.execute(DropSchema(self.schema))
         self.logger.info('metrics.py, metrics table dropped')
 
 
@@ -183,25 +183,25 @@ class Metrics():
         return first
 
     def update_metrics_changed(self, row_view_schema='ingest', delta_schema='delta'):
-        delta_sync = SqlSync(delta_schema)
+        delta_sync = row_view.SqlSync(delta_schema)
         delta_table = delta_sync.get_delta_table()
-        sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.get_row_view_table()
+        sql_sync = row_view.SqlSync(row_view_schema)
+        row_view_table = sql_sync.get_row_view_table()
         connection = sql_sync_engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
         for delta_row in results:
             row = sql_sync.get_row_view(delta_row['bibcode'])
-            metrics_dict = self.row_view_to_metrics(row_view)
+            metrics_dict = self.row_view_to_metrics(row_view_table)
             self.save(metrics_dict)
         self.flush()
 
     # paper from 1988: 1988PASP..100.1134B
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
-        sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.get_row_view(bibcode)
-        metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
+        sql_sync = row_view.SqlSync(row_view_schema)
+        row_view_bibcode = sql_sync.get_row_view(bibcode)
+        metrics_dict = self.row_view_to_metrics(row_view_bibcode, sql_sync)
         self.save(metrics_dict)
         self.flush()
 
@@ -232,15 +232,15 @@ class Metrics():
         step_size = 1000
         count = 0
         offset = start_offset
-        sql_sync = SqlSync(row_view_schema)
+        sql_sync = row_view.SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
         while True:
             s = select([table])
             s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
             connection = sql_sync.sql_sync_connection; 
             results = connection.execute(s)
-            for row_view in results:
-                metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
+            for row_view_current in results:
+                metrics_dict = self.row_view_to_metrics(row_view_current, sql_sync)
                 self.save(metrics_dict)
                 count += 1
                 if count % 100000 == 0:
@@ -265,29 +265,29 @@ class Metrics():
     #  c = number of citations tha paper received (why not call it references?)
     #  c/a = normalized citations
     #  sum over N papers
-    def row_view_to_metrics(self, row_view, sql_sync):
+    def row_view_to_metrics(self, passed_row_view, sql_sync):
         """convert the passed row view into a complete metrics dictionary"""
         # first do easy fields
-        bibcode = row_view['bibcode']
+        bibcode = passed_row_view['bibcode']
         metrics_dict = {'bibcode': bibcode}
-        metrics_dict['id'] = row_view['id']
-        metrics_dict['refereed'] = row_view['refereed']
-        metrics_dict['citations'] = row_view['citations']
-        metrics_dict['reads'] = row_view['reads']
-        metrics_dict['downloads'] = row_view['downloads']
+        metrics_dict['id'] = passed_row_view['id']
+        metrics_dict['refereed'] = passed_row_view['refereed']
+        metrics_dict['citations'] = passed_row_view['citations']
+        metrics_dict['reads'] = passed_row_view['reads']
+        metrics_dict['downloads'] = passed_row_view['downloads']
         
-        metrics_dict['citation_num'] = len(row_view['citations']) if row_view['citations'] else 0
-        metrics_dict['author_num'] = max(len(row_view['authors']),1) if row_view['authors'] else 1
-        metrics_dict['reference_num'] = len(row_view['reference']) if row_view['reference'] else 0
+        metrics_dict['citation_num'] = len(passed_row_view['citations']) if passed_row_view['citations'] else 0
+        metrics_dict['author_num'] = max(len(passed_row_view['authors']),1) if passed_row_view['authors'] else 1
+        metrics_dict['reference_num'] = len(passed_row_view['reference']) if passed_row_view['reference'] else 0
 
-        #metrics_dict['citation_num'] = len(row_view.get('citations', [])
-        #metrics_dict['author_num'] = max(len(row_view.get('authors'),[]),1)
-        #metrics_dict['reference_num'] = len(row_view.get('reference'),[]) 
+        #metrics_dict['citation_num'] = len(passed_row_view.get('citations', [])
+        #metrics_dict['author_num'] = max(len(passed_row_view.get('authors'),[]),1)
+        #metrics_dict['reference_num'] = len(passed_row_view.get('reference'),[]) 
 
         # next deal with papers that cite the current one
         # compute histogram, normalized values of citations
         #  and create list of refereed citations
-        citations = row_view['citations']
+        citations = passed_row_view['citations']
         normalized_reference = 0.0
         citations_json_records = []
         refereed_citations = []
@@ -491,8 +491,8 @@ if __name__ == "__main__":
         m.update_metrics_all(args.rowViewSchema, start_offset=int(args.startOffset), end_offset=int(args.endOffset))
 
     elif args.command == 'metricsCompare' and args.bibcode:
-        metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
-        metrics2 = Metrics('', METRICS_DATABASE2)
+        metrics1 = None # Metrics(args.metricsSchema, METRICS_DATABASE)
+        metrics2 = None # Metrics('', METRICS_DATABASE2)
         if (args.bibcode == 'stdin'):
             while True:
                 line = sys.stdin.readline()

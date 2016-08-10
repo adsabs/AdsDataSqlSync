@@ -7,10 +7,10 @@ import os
 from sqlalchemy.orm import sessionmaker
 
 
-from sqlSync import columnFileIngest
-from sqlSync import row_view
-from metrics import metrics
-from queue import queue
+import columnFileIngest
+import row_view
+import metrics
+import queue
 logger = None
 config = {}
 
@@ -23,14 +23,14 @@ def main():
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | \
-createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | queueChangedBibcodes | initQueue')
+createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | queueChangedBibcodes | initQueue | runPipeline')
 
     args = parser.parse_args()
 
     config.update(utils.load_config())
 
     global logger
-    logger = utils.setup_logging(config['LOG_FILENAME'], 'AdsDataSqlSync', config['LOGGING_LEVEL'])
+    logger = utils.setup_logging('AdsDataSqlSync', 'AdsDataSqlSync', config['LOGGING_LEVEL'])
     logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
 
     ingester = columnFileIngest.ColumnFileIngester(config)
@@ -57,7 +57,6 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
     elif args.command == 'createJoinedRows':
-        print 'createJoinedRows'
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_joined_rows()
 
@@ -115,6 +114,43 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
     elif args.command == 'initQueue':
         q = queue.Queue(None, config)
         q.init_rabbitmq()
+    elif args.command == 'runPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
+        # drop tables, create tables, load data, compute metrics
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.drop_column_tables()
+        sql_sync.create_column_tables()
+
+        Session = sessionmaker()
+        sess = Session(bind=sql_sync.sql_sync_connection)
+        for t in row_view.SqlSync.all_types:
+            command_args = ' --fileType ' + t +   \
+                ' --rowViewSchemaName ' + args.rowViewSchemaName + ' ingest'
+            python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
+            sql_command = 'copy ' + args.rowViewSchemaName + '.' + t +  \
+                ' from program ' + python_command + ';'
+
+            sess.execute(sql_command)
+            sess.commit()
+        sess.close()
+        sql_sync.create_joined_rows()
+
+        m = metrics.Metrics(args.metricsSchemaName)
+        m.drop_metrics_table()
+        m.create_metrics_table()
+        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        Session = sessionmaker()
+        sess = Session(bind=m.connection)
+        command_args = ' populateMetricsTable '  \
+            + ' --rowViewSchemaName ' + args.rowViewSchemaName \
+            + ' --metricsSchemaName ' + args.metricsSchemaName
+        python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
+        sql_command = 'copy ' + args.metricsSchemaName + '.metrics'   \
+            + ' from program ' + python_command + ';'
+
+        sess.execute(sql_command)
+        sess.commit()
+        sess.close()
+
 
     else:
         print 'app.py: illegal command or missing argument', args.command
