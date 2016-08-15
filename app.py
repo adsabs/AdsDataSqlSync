@@ -78,15 +78,18 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
 
         sess.close()
 
-    elif args.command == 'createMetricsTable':
+    elif args.command == 'createMetricsTable' and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName)
         m.create_metrics_table()
-    elif args.command == 'dropMetricsTable':
+    elif args.command == 'dropMetricsTable' and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table()
-    elif args.command == 'populateMetricsTable':
+    elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': True})
         m.update_metrics_all(args.rowViewSchemaName)
+    elif args.command == 'populateMetricsTableDelts' and args.rowViewSchemaName and args.metricsSchemaName:
+        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False})
+        m.update_metrics_changed(args.rowViewSchemaName)
     elif args.command == 'populateMetricsTableMeta' and args.rowViewSchemaName and args.metricsSchemaName:
         # run copy from program command
         # that sql command will populate metrics table
@@ -111,6 +114,9 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
     elif args.command == 'queueChangedBibcodes' and args.rowViewSchemaName:
         q = queue.Queue(args.rowViewSchemaName, config)
         q.add_changed_bibcodes()
+    elif args.command == 'logDeltaReasons' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
     elif args.command == 'initQueue':
         q = queue.Queue(None, config)
         q.init_rabbitmq()

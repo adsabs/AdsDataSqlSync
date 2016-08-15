@@ -102,6 +102,27 @@ class SqlSync:
                      Column('bibcode', String, primary_key=True),
                      schema=self.schema_name) 
 
+    def log_delta_reasons(self, baseline_schema):
+        """log the counts for the changes in each column from baseline """
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
+                        'boost', 'citation_count', 'read_count', 'norm_cites',
+                        'readers', 'downloads', 'reads', 'reference')
+        for column_name in column_names:
+            sql_command = 'select count(*) from ' + self.schema_name \
+                + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
+                + ' where ' + self.schema_name + '.rowviewm.bibcode=' + baseline_schema + '.rowviewm.bibcode' \
+                + ' and ' + self.schema_name + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
+
+            r = sess.execute(sql_command)
+            m = 'number of {} different: {}'.format(column_name, r.scalar())
+            print m
+            self.logger.info(m)
+        sess.commit()
+        sess.close()
+        
+
     def get_canonical_table(self, meta=None):
         if meta is None:
             meta = self.meta

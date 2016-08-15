@@ -182,8 +182,9 @@ class Metrics():
         first = r.first()
         return first
 
-    def update_metrics_changed(self, row_view_schema='ingest', delta_schema='delta'):
-        delta_sync = row_view.SqlSync(delta_schema)
+    def update_metrics_changed(self, row_view_schema='ingest'):  #, delta_schema='delta'):
+        """changed bibcodes are in sql table, for each we update metrics record"""
+        delta_sync = row_view.SqlSync(row_view_schema)
         delta_table = delta_sync.get_delta_table()
         sql_sync = row_view.SqlSync(row_view_schema)
         row_view_table = sql_sync.get_row_view_table()
