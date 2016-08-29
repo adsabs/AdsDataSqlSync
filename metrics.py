@@ -184,18 +184,20 @@ class Metrics():
 
     def update_metrics_changed(self, row_view_schema='ingest'):  #, delta_schema='delta'):
         """changed bibcodes are in sql table, for each we update metrics record"""
+        self.copy_from_program = False  # maybe hack
         delta_sync = row_view.SqlSync(row_view_schema)
         delta_table = delta_sync.get_delta_table()
         sql_sync = row_view.SqlSync(row_view_schema)
         row_view_table = sql_sync.get_row_view_table()
-        connection = sql_sync_engine.connect()
+        connection = sql_sync.sql_sync_engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
         for delta_row in results:
             row = sql_sync.get_row_view(delta_row['bibcode'])
-            metrics_dict = self.row_view_to_metrics(row_view_table)
+            metrics_dict = self.row_view_to_metrics(row, sql_sync)
             self.save(metrics_dict)
         self.flush()
+        # need to close?
 
     # paper from 1988: 1988PASP..100.1134B
     # paper with 3 citations 2015MNRAS.447.1618S

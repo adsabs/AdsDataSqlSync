@@ -22,8 +22,10 @@ def main():
     parser.add_argument('--rowViewBaselineSchemaName', default=None, 
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
-                        help='ingest | verify | createIngestTables | dropIngestTables | \
-createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | queueChangedBibcodes | initQueue | runPipeline')
+                        help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
+                        + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
+                        + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows ' \
+                        + ' | queueChangedBibcodes | initQueue | runPipeline | runPipelineDelta')
 
     args = parser.parse_args()
 
@@ -87,8 +89,8 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': True})
         m.update_metrics_all(args.rowViewSchemaName)
-    elif args.command == 'populateMetricsTableDelts' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False})
+    elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
+        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
         m.update_metrics_changed(args.rowViewSchemaName)
     elif args.command == 'populateMetricsTableMeta' and args.rowViewSchemaName and args.metricsSchemaName:
         # run copy from program command
@@ -108,6 +110,9 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+    elif args.command == 'renameSchema' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
@@ -156,6 +161,36 @@ createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable | populate
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+
+    elif args.command == 'runPipelineDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
+        # drop tables, rename schema, create tables, load data, compute delta, compute metrics
+        baseline_sql_sync = row_view.SqlSync(args.rowViewBaselineSchemaName, config)
+        baseline_sql_sync.drop_column_tables()
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
+
+        baseline_sql_sync = None
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.create_column_tables()
+       
+        Session = sessionmaker()
+        sess = Session(bind=sql_sync.sql_sync_connection)
+        for t in row_view.SqlSync.all_types:
+            command_args = ' --fileType ' + t +   \
+                           ' --rowViewSchemaName ' + args.rowViewSchemaName + ' ingest'
+            python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
+            sql_command = 'copy ' + args.rowViewSchemaName + '.' + t +  \
+                          ' from program ' + python_command + ';'
+           
+            sess.execute(sql_command)
+            sess.commit()
+        sess.close()
+        sql_sync.create_joined_rows()
+        sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+
+        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
+        m.update_metrics_changed(args.rowViewSchemaName)
 
 
     else:
