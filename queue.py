@@ -25,12 +25,21 @@ class Queue():
         self.row_view_schema = row_view_schema
         self.logger = logging.getLogger('AdsDataSqlSync')
 
-
+    def add_all_bibcodes(self):
+        """put changed bibcodes in solr update queue"""
+        sql_sync = row_view.SqlSync(self.row_view_schema)
+        canonical_table = sql_sync.get_canonical_table()
+        self.add_bibcodes_aux(canonical_table)
+        
     def add_changed_bibcodes(self):
         """put changed bibcodes in solr update queue"""
-        sql_sync = SqlSync(self.row_view_schema)
+        sql_sync = row_view.SqlSync(self.row_view_schema)
         delta_table = sql_sync.get_delta_table()
-        s = select([delta_table])
+        self.add_bibcodes_aux(delta_table)
+
+    def add_bibcodes_aux(self, t):
+        """expects passed table has a column named bibcode"""
+        s = select([t])
         rp = sql_sync.sql_sync_connection.execute(s)
         count = 0
         max_payload_size = 100
@@ -41,8 +50,9 @@ class Queue():
                 self.publish_to_rabbitmq(payload)
                 payload = []
             count += 1
-            if count % 100000 == 0:
+            if count % 10000 == 0:
                 self.logger.debug('saving changed bibcodes to queue, count = {}'.format(count))
+                return # hack for testing
         if len(payload) > 0:
             self.publish_to_rabbitmq(payload)
         self.logger.info('{} changed bibcodes set to queue'.format(count))
@@ -60,7 +70,8 @@ class Queue():
 
     def init_rabbitmq(self):
         """useful for testing to create exchanges and routes on new rabbitmq instance"""
-        url = self.config.get('RABBITMQ_URL', 'amqp://admin:password@localhost:5672/ADSimportpipeline')
+        #url = self.config.get('RABBITMQ_URL', 'amqp://admin:password@localhost:5672/ADSimportpipeline')
+        url = self.config.get('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/ADSimportpipeline')
         connection = pika.BlockingConnection(pika.URLParameters(url))
         channel = connection.channel()
         exchange = self.config.get('RABBITMQ_EXCHANGE', 'MergerPipelineExchange')

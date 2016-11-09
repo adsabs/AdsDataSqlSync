@@ -24,8 +24,8 @@ def main():
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
-                        + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows ' \
-                        + ' | queueChangedBibcodes | initQueue | runPipeline | runPipelineDelta')
+                        + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
+                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | runPipeline | runPipelineDelta')
 
     args = parser.parse_args()
 
@@ -116,6 +116,9 @@ def main():
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
+    elif args.command == 'queueAllBibcodes' and args.rowViewSchemaName:
+        q = queue.Queue(args.rowViewSchemaName, config)
+        q.add_all_bibcodes()
     elif args.command == 'queueChangedBibcodes' and args.rowViewSchemaName:
         q = queue.Queue(args.rowViewSchemaName, config)
         q.add_changed_bibcodes()
@@ -194,7 +197,10 @@ def main():
 
 
     else:
-        print 'app.py: illegal command or missing argument', args.command
+        print 'app.py: illegal command or missing argument, command = ', args.command
+        print '  row view schema name = ', args.rowViewSchemaName
+        print '  row view baseline schema name = ', args.rowViewBaselineSchemaName
+        print '  metrics schema name = ', args.metricsSchemaName
 
             
     logger.info('completed columnFileIngest with {}, {}'.format(args.command, args.fileType))

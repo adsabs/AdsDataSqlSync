@@ -163,8 +163,10 @@ class Metrics():
                 first = r.first()
                 if first:
                     d['tmp_bibcode'] = d['bibcode']
+                    d.pop('id', None)
                     updates.append(d)
                 else:
+                    d.pop('id', None)
                     inserts.append(d)
 
         if len(updates):
@@ -192,10 +194,14 @@ class Metrics():
         connection = sql_sync.sql_sync_engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
+        count = 0
         for delta_row in results:
             row = sql_sync.get_row_view(delta_row['bibcode'])
             metrics_dict = self.row_view_to_metrics(row, sql_sync)
             self.save(metrics_dict)
+            if (count % 10000) == 0:
+                self.logger.debug('delta count = {}, bibcode = {}'.format(count, delta_row['bibcode']))
+            count += 1
         self.flush()
         # need to close?
 

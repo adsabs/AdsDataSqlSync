@@ -59,8 +59,12 @@ class SqlSync:
         for t in SqlSync.all_types:
             table = self.get_table(t, temp_meta)
         temp_meta.create_all(self.sql_sync_engine)
-        self.logger.info('row_view, created database tables for column files')
+        self.logger.info('row_view, created database column tables in schema {}'.format(self.schema_name))
         
+
+    def rename_schema(self, new_name):
+        self.sql_sync_engine.execute("alter schema {} rename to {}".format(self.schema_name, new_name))
+        self.logger.info('row_view, renamed schema {} to {} '.format(self.schema_name, new_name))
 
     def drop_column_tables(self):
         self.sql_sync_engine.execute("drop schema if exists {} cascade".format(self.schema_name))
@@ -69,9 +73,10 @@ class SqlSync:
         #    table = self.get_table(t, temp_meta)
         #temp_meta.drop_all(self.sql_sync_engine)
         #self.sql_sync_engine.execute(DropSchema(self.schema_name))
-        self.logger.info('row_view, dropped database tables for column files')
+        self.logger.info('row_view, dropped database column tables in schema {}'.format(self.schema_name))
 
     def create_joined_rows(self):
+        self.logger.info('row_view, creating joined materialized view in schema {}'.format(self.schema_name))
         Session = sessionmaker()
         sess = Session(bind=self.sql_sync_connection)
         sql_command = SqlSync.create_view_sql.format(self.schema_name)
@@ -84,14 +89,17 @@ class SqlSync:
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+        self.logger.info('row_view, created joined materialized view in schema {}'.format(self.schema_name))
     
     def create_delta_rows(self, baseline_schema):
+        self.logger.info('row_view, creating delta/changed table in schema {}'.format(self.schema_name))
         Session = sessionmaker()
         sess = Session(bind=self.sql_sync_connection)
         sql_command = SqlSync.create_changed_sql.format(self.schema_name, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
+        self.logger.info('row_view, created delta/changed table in schema {}'.format(self.schema_name))
         
         
     def get_delta_table(self, meta=None):
@@ -106,6 +114,12 @@ class SqlSync:
         """log the counts for the changes in each column from baseline """
         Session = sessionmaker()
         sess = Session(bind=self.sql_sync_connection)
+        sql_command = 'select count(*) from ' + self.schema_name + '.changedrowsm'
+        r = sess.execute(sql_command)
+        m = 'total number of changed bibcodes: {}'.format(r.scalar())
+        print m
+        self.logger.info(m)
+        
         column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
                         'boost', 'citation_count', 'read_count', 'norm_cites',
                         'readers', 'downloads', 'reads', 'reference')
