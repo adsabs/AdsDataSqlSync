@@ -8,12 +8,12 @@ LOGGING_LEVEL = 'DEBUG'
 #DATA_PATH = '/SpacemanSteve/tmp/columnFiles3/'
 #DATA_PATH = '/proj.adsqb/ads_abstracts/columnFiles2/'
 #DATA_PATH = '/proj.adsqb/ads_abstracts/20160831/'
-DATA_PATH = /inputDataDir
+DATA_PATH = '/inputDataDir/current/'
 
 # where to read column files into
-INGEST_DATABASE = 'postgresql://docker:docker@localhost:5432/postgres'
+INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database to use
-METRICS_DATABASE = 'postgresql://docker:docker@localhost:5432/postgres'
+METRICS_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 
 # filenames for column files
 DOWNLOAD = 'reads/downloads.links'
