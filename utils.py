@@ -61,15 +61,19 @@ def setup_logging(file_, name_, level='WARN'):
     datefmt = '%m/%d/%Y %H:%M:%S'
     formatter = logging.Formatter(fmt=logfmt, datefmt=datefmt)
     logging_instance = logging.getLogger(name_)
-    fn_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')), 'logs')
+    fn_path = '/tmp' # expecting to run in Docker 
     if not os.path.exists(fn_path):
         os.makedirs(fn_path)
     fn = os.path.join(fn_path, '{0}.log'.format(name_))
+    # since postgres also runs python command which writes to log file
+    #  log and lock files must be widely writeable
+    previous_umask = os.umask(0o000)
     rfh = ConcurrentRotatingFileHandler(filename=fn,
                                         maxBytes=2097152,
                                         backupCount=5,
                                         mode='a',
                                         encoding='UTF-8')  # 2MB file                                   
+    os.umask(previous_umask)
     rfh.setFormatter(formatter)
     logging_instance.handlers = []
     logging_instance.addHandler(rfh)
