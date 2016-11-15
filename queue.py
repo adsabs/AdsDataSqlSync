@@ -93,17 +93,17 @@ class Queue():
         """if the vhost does not exist, create it                                                                   
         pika does not appear to support this so we use the rest api
         vhost name should be only thing in the path section of the url
+        note: we may need to also add a user to the queue
         """
         print 'received', url
         parsed = urlparse(url)
         # generate url for rest request vhost info, rest request must use http
         vhost_name = parsed.path
         u = 'http://' + parsed.netloc + '/api/vhosts' + vhost_name
-        print 'u', u
         r = requests.get(u)
         if r.text[0] == '{':
             # vhost exists and json response holds details
-            self.logger.info('{} vhost exists: {}'.format(vhost_name, parsed.text))
+            self.logger.info('{} vhost exists: {}'.format(vhost_name, r.text))
             print 'vhost already exists'
         elif '404 Not Found' in r.text:
             # here with html response, we need to create the vhost
@@ -116,5 +116,6 @@ class Queue():
         else:
             self.logger.error('in verify_vhost, could not parse RabbitMQ reponse to vhost check: {}'.format(r))
             print 'did not understand response', r
+            print r.text
 
 
