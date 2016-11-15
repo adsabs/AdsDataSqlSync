@@ -17,15 +17,15 @@ config = {}
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
-    parser.add_argument('--rowViewSchemaName', default='public', help='name of the postgres row view schema')
-    parser.add_argument('--metricsSchemaName', default='public', help='name of the postgres metrics schema')
-    parser.add_argument('--rowViewBaselineSchemaName', default=None, 
+    parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
+    parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
+    parser.add_argument('-b', '--rowViewBaselineSchemaName', default='baseline', 
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
-                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | runPipeline | runPipelineDelta')
+                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipeline | runPipelineDelta')
 
     args = parser.parse_args()
 
@@ -128,6 +128,9 @@ def main():
     elif args.command == 'initQueue':
         q = queue.Queue(None, config)
         q.init_rabbitmq()
+    elif args.command == 'testQueue':
+        q = queue.Queue(None, config)
+        q.publish_to_rabbitmq(['1513hist.book.....H', '1057wjlf.book.....C'])
     elif args.command == 'runPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
         # drop tables, create tables, load data, compute metrics
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)

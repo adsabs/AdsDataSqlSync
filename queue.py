@@ -42,6 +42,7 @@ class Queue():
     def add_bibcodes_aux(self, t):
         """expects passed table has a column named bibcode"""
         s = select([t])
+        sql_sync = row_view.SqlSync(self.row_view_schema)
         rp = sql_sync.sql_sync_connection.execute(s)
         count = 0
         max_payload_size = 100
@@ -51,13 +52,15 @@ class Queue():
             if len(payload) >= max_payload_size:
                 self.publish_to_rabbitmq(payload)
                 payload = []
+                self.logger.info('saving changed bibcodes to queue, count = {}'.format(count))
+                self.logger.debug('bibcodes: {}'.format(str(payload)))
             count += 1
-            if count % 10000 == 0:
-                self.logger.debug('saving changed bibcodes to queue, count = {}'.format(count))
-                return # hack for testing
         if len(payload) > 0:
+            # here if we still have a part of a payload to save
             self.publish_to_rabbitmq(payload)
-        self.logger.info('{} changed bibcodes set to queue'.format(count))
+	    self.logger.info('saving final changed bibcodes to queue, count = {}'.format(count))
+            self.logger.debug('bibcodes: {}'.format(str(payload)))
+        self.logger.info('{} changed bibcodes sent to queue'.format(count))
 
 
     def publish_to_rabbitmq(self, payload):
@@ -65,6 +68,7 @@ class Queue():
         url = self.config.get('RABBITMQ_URL', 'amqp://admin:password@localhost:5672/ADSimportpipeline')
         exchange = self.config.get('RABBITMQ_EXCHANGE', 'MergerPipelineExchange')
         route = self.config.get('RABBITMQ_ROUTE', 'SolrUpdateRoute')
+	self.logger.debug('saving to rabbitmq at url {}'.format(url))
         connection = pika.BlockingConnection(pika.URLParameters(url))
         channel = connection.channel()
         channel.basic_publish('', route, json.dumps(payload))
