@@ -34,6 +34,22 @@ def load_column_files(sql_sync):
     sess.close()
     sql_sync.create_joined_rows()
 
+def load_metrics(m, row_view_schema):
+    """
+    """
+    Session = sessionmaker()
+    sess = Session(bind=m.connection)
+    command_args = ' populateMetricsTable '  \
+                   + ' --rowViewSchemaName ' + row_view_schema \
+                   + ' --metricsSchemaName ' + m.schema
+    python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
+    sql_command = 'copy ' + args.metricsSchemaName + '.metrics'   \
+                  + ' from program ' + python_command + ';'
+    
+    sess.execute(sql_command)
+    sess.commit()
+    sess.close()
+
 
 
     
@@ -48,7 +64,8 @@ def main():
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
-                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipeline | runPipelineDelta')
+                        + ' | runRowViewPipeline | runMetricsPipeline ' \
+                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
 
@@ -154,32 +171,33 @@ def main():
     elif args.command == 'testQueue':
         q = queue.Queue(None, config)
         q.publish_to_rabbitmq(['1513hist.book.....H', '1057wjlf.book.....C'])
-    elif args.command == 'runPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
+    elif args.command == 'runRowViewPipeline' and args.rowViewSchemaName:
         # drop tables, create tables, load data, compute metrics
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
-
         load_column_files(sql_sync)
 
-        m = metrics.Metrics(args.metricsSchemaName)
+    elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
         m.drop_metrics_table()
         m.create_metrics_table()
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
-        Session = sessionmaker()
-        sess = Session(bind=m.connection)
-        command_args = ' populateMetricsTable '  \
-            + ' --rowViewSchemaName ' + args.rowViewSchemaName \
-            + ' --metricsSchemaName ' + args.metricsSchemaName
-        python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-        sql_command = 'copy ' + args.metricsSchemaName + '.metrics'   \
-            + ' from program ' + python_command + ';'
+        load_metrics(m, args.rowViewSchemaName)
 
-        sess.execute(sql_command)
-        sess.commit()
-        sess.close()
+    elif args.command == 'runPipelines' and args.rowViewSchemaName and args.metricsSchemaName:
+        # drop tables, create tables, load data, compute metrics
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.drop_column_tables()
+        sql_sync.create_column_tables()
+        load_column_files(sql_sync)
 
-    elif args.command == 'runPipelineDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
+        m.drop_metrics_table()
+        m.create_metrics_table()
+        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        load_metrics(m, args.rowViewSchemaName)
+
+
+    elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
         # drop tables, rename schema, create tables, load data, compute delta, compute metrics
         baseline_sql_sync = row_view.SqlSync(args.rowViewBaselineSchemaName, config)
         baseline_sql_sync.drop_column_tables()
