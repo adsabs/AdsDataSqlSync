@@ -35,6 +35,6 @@ CANONICAL = 'bibcodes.list.can'
 MAX_ROWS = -1
 
 #RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/ADSimportpipeline'
+RABBITMQ_URL = 'amqp://@adsx:5672/BumblebeeETL'
 RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
 RABBITMQ_ROUTE = 'SolrUpdateRoute'

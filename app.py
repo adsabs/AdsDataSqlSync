@@ -14,6 +14,29 @@ import queue
 logger = None
 config = {}
 
+
+def load_column_files(sql_sync):
+    """ generate and run sql 'copy from program' commands to load column files
+    and, create joined row view 
+    note that the copy from program command actually runs this python code with different arguments
+    """
+    Session = sessionmaker()
+    sess = Session(bind=sql_sync.sql_sync_connection)
+    for t in row_view.SqlSync.all_types:
+        command_args = ' --fileType ' + t +   \
+                       ' --rowViewSchemaName ' + sql_sync.schema_name + ' ingest'
+        python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
+        sql_command = 'copy ' + sql_sync.schema_name + '.' + t +  \
+                      ' from program ' + python_command + ';'
+
+        sess.execute(sql_command)
+        sess.commit()
+    sess.close()
+    sql_sync.create_joined_rows()
+
+
+
+    
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
@@ -137,19 +160,7 @@ def main():
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
 
-        Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
-        for t in row_view.SqlSync.all_types:
-            command_args = ' --fileType ' + t +   \
-                ' --rowViewSchemaName ' + args.rowViewSchemaName + ' ingest'
-            python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-            sql_command = 'copy ' + args.rowViewSchemaName + '.' + t +  \
-                ' from program ' + python_command + ';'
-
-            sess.execute(sql_command)
-            sess.commit()
-        sess.close()
-        sql_sync.create_joined_rows()
+        load_column_files(sql_sync)
 
         m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table()
@@ -179,19 +190,8 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_column_tables()
        
-        Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
-        for t in row_view.SqlSync.all_types:
-            command_args = ' --fileType ' + t +   \
-                           ' --rowViewSchemaName ' + args.rowViewSchemaName + ' ingest'
-            python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-            sql_command = 'copy ' + args.rowViewSchemaName + '.' + t +  \
-                          ' from program ' + python_command + ';'
-           
-            sess.execute(sql_command)
-            sess.commit()
-        sess.close()
-        sql_sync.create_joined_rows()
+        load_column_files(sql_sync)
+
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
 

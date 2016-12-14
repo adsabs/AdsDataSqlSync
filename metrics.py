@@ -241,6 +241,7 @@ class Metrics():
         step_size = 1000
         count = 0
         offset = start_offset
+        max_rows = self.config['MAX_ROWS']
         sql_sync = row_view.SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
         while True:
@@ -252,6 +253,8 @@ class Metrics():
                 metrics_dict = self.row_view_to_metrics(row_view_current, sql_sync)
                 self.save(metrics_dict)
                 count += 1
+                if max_rows > 0 and count > max_rows:
+                    break
                 if count % 100000 == 0:
                     self.logger.debug('metrics.py, metrics count = {}'.format(count))
                 if end_offset > 0 and end_offset <= (count + start_offset):
