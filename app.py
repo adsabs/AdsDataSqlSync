@@ -43,7 +43,7 @@ def load_metrics(m, row_view_schema):
                    + ' --rowViewSchemaName ' + row_view_schema \
                    + ' --metricsSchemaName ' + m.schema
     python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-    sql_command = 'copy ' + args.metricsSchemaName + '.metrics'   \
+    sql_command = 'copy ' + m.schema + '.metrics'   \
                   + ' from program ' + python_command + ';'
     
     sess.execute(sql_command)
@@ -179,9 +179,9 @@ def main():
         load_column_files(sql_sync)
 
     elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
+        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         load_metrics(m, args.rowViewSchemaName)
 
     elif args.command == 'runPipelines' and args.rowViewSchemaName and args.metricsSchemaName:
@@ -191,9 +191,9 @@ def main():
         sql_sync.create_column_tables()
         load_column_files(sql_sync)
 
+        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         load_metrics(m, args.rowViewSchemaName)
 
 
