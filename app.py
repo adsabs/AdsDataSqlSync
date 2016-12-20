@@ -65,6 +65,7 @@ def main():
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
                         + ' | runRowViewPipeline | runMetricsPipeline ' \
+                        | ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
@@ -183,6 +184,29 @@ def main():
         m.drop_metrics_table()
         m.create_metrics_table()
         load_metrics(m, args.rowViewSchemaName)
+
+
+    elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        # drop tables, rename schema, create tables, load data, compute delta, compute metrics
+        baseline_sql_sync = row_view.SqlSync(args.rowViewBaselineSchemaName, config)
+        baseline_sql_sync.drop_column_tables()
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
+
+        baseline_sql_sync = None
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.create_column_tables()
+       
+        load_column_files(sql_sync)
+
+        sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+
+    elif args.command == 'runMetricsPipelineDelta' and args.rowViewSchemaName and args.metricsSchemaName:
+
+        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
+        m.update_metrics_changed(args.rowViewSchemaName)
+
 
     elif args.command == 'runPipelines' and args.rowViewSchemaName and args.metricsSchemaName:
         # drop tables, create tables, load data, compute metrics
