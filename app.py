@@ -65,7 +65,7 @@ def main():
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
                         + ' | runRowViewPipeline | runMetricsPipeline ' \
-                        | ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
+                        + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
