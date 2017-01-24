@@ -102,6 +102,10 @@ class Metrics():
         temp_meta.create_all(self.engine)
         self.logger.info('metrics.py, metrics table created')
 
+    def rename_schema(self, new_name):
+        self.sql_sync_engine.execute("alter schema {} rename to {}".format(self.schema_name, new_name))
+        self.logger.info('metrics, renamed schema {} to {} '.format(self.schema_name, new_name))
+
 
     def drop_metrics_table(self):
         self.engine.execute("drop schema if exists {} cascade".format(self.schema))

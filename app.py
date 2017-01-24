@@ -180,10 +180,14 @@ def main():
         load_column_files(sql_sync)
 
     elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        tmp_name = 'tmpMetrics'
+        m = metrics.Metrics(tmp_name, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
-        load_metrics(m, args.rowViewSchemaName)
+        load_metrics(m, tmp_name)  # args.rowViewSchemaName)
+        m2 = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        m2.drop_metrics_table()
+        m.rename_schema(args.metricsSchemaName)
 
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
@@ -215,10 +219,14 @@ def main():
         sql_sync.create_column_tables()
         load_column_files(sql_sync)
 
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        tmp_name = 'tmpMetrics'
+        m = metrics.Metrics(tmp_name, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
-        load_metrics(m, args.rowViewSchemaName)
+        load_metrics(m, tmp_name)  # args.rowViewSchemaName)
+        m2 = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        m2.drop_metrics_table()
+        m.rename_schema(args.metricsSchemaName)
 
 
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:

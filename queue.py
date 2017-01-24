@@ -46,6 +46,7 @@ class Queue():
         rp = sql_sync.sql_sync_connection.execute(s)
         count = 0
         max_payload_size = 100
+        max_rows = self.config['MAX_ROWS']
         payload = []
         for record in rp:
             payload.append(record['bibcode'])
@@ -55,6 +56,8 @@ class Queue():
                 self.logger.info('saving changed bibcodes to queue, count = {}'.format(count))
                 self.logger.debug('bibcodes: {}'.format(str(payload)))
             count += 1
+            if max_rows > 0 and count * max_payload_size > max_rows:
+              break
         if len(payload) > 0:
             # here if we still have a part of a payload to save
             self.publish_to_rabbitmq(payload)
