@@ -184,7 +184,6 @@ def main():
         m.drop_metrics_table()
         m.create_metrics_table()
         load_metrics(m, args.rowViewSchemaName)
-        m.rename_schema(args.metricsSchemaName)
 
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
@@ -221,7 +220,7 @@ def main():
         m.drop_metrics_table()
         m.create_metrics_table()
         load_metrics(m, args.rowViewSchemaName)
-        m.rename_schema(args.metricsSchemaName)
+
 
 
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
