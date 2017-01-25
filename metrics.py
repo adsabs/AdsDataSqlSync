@@ -349,7 +349,7 @@ class Metrics():
         m1 = self.read(bibcode)
         m2 = metrics2.read(bibcode)
         if m1 == None or m2 == None:
-            return ['BibcodeNotFound:' + bibcode + ' ' + m1 + ' ' + m2']
+            return ['BibcodeNotFound:' + bibcode + ' ' + m1 + ' ' + m2]
         mismatches = []
         fields = ('refereed', 'rn_citations', 'rn_citation_data', 'downloads',
                   'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
