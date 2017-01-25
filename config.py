@@ -15,6 +15,9 @@ INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database to use
 METRICS_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 
+# metrics database used for validation/comparison
+METRICS_DATABASE2 = None
+
 # filenames for column files
 DOWNLOAD = 'reads/downloads.links'
 READS = 'reads/all.links'
