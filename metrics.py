@@ -18,12 +18,11 @@ import json
 import argparse
 import logging
 
+import row_view
 import utils
 
-sys.path.append('/SpacemanSteve/code/cfa/AdsDataSqlSync/AdsDataSqlSync/sqlSync')
-from row_view import SqlSync
 
-from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
+#from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
 
 Base = declarative_base()
 meta = MetaData()
@@ -103,12 +102,17 @@ class Metrics():
         temp_meta.create_all(self.engine)
         self.logger.info('metrics.py, metrics table created')
 
+    def rename_schema(self, new_name):
+        self.sql_sync_engine.execute("alter schema {} rename to {}".format(self.schema_name, new_name))
+        self.logger.info('metrics, renamed schema {} to {} '.format(self.schema_name, new_name))
+
 
     def drop_metrics_table(self):
-        temp_meta = MetaData()
-        table = self.get_metrics_table(temp_meta)
-        temp_meta.drop_all(self.engine)
-        self.engine.execute(DropSchema(self.schema))
+        self.engine.execute("drop schema if exists {} cascade".format(self.schema))
+        #temp_meta = MetaData()
+        #table = self.get_metrics_table(temp_meta)
+        #temp_meta.drop_all(self.engine)
+        #self.engine.execute(DropSchema(self.schema))
         self.logger.info('metrics.py, metrics table dropped')
 
 
@@ -163,8 +167,10 @@ class Metrics():
                 first = r.first()
                 if first:
                     d['tmp_bibcode'] = d['bibcode']
+                    d.pop('id', None)
                     updates.append(d)
                 else:
+                    d.pop('id', None)
                     inserts.append(d)
 
         if len(updates):
@@ -182,26 +188,33 @@ class Metrics():
         first = r.first()
         return first
 
-    def update_metrics_changed(self, row_view_schema='ingest', delta_schema='delta'):
-        delta_sync = SqlSync(delta_schema)
+    def update_metrics_changed(self, row_view_schema='ingest'):  #, delta_schema='delta'):
+        """changed bibcodes are in sql table, for each we update metrics record"""
+        self.copy_from_program = False  # maybe hack
+        delta_sync = row_view.SqlSync(row_view_schema)
         delta_table = delta_sync.get_delta_table()
-        sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.get_row_view_table()
-        connection = sql_sync_engine.connect()
+        sql_sync = row_view.SqlSync(row_view_schema)
+        row_view_table = sql_sync.get_row_view_table()
+        connection = sql_sync.sql_sync_engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
+        count = 0
         for delta_row in results:
             row = sql_sync.get_row_view(delta_row['bibcode'])
-            metrics_dict = self.row_view_to_metrics(row_view)
+            metrics_dict = self.row_view_to_metrics(row, sql_sync)
             self.save(metrics_dict)
+            if (count % 10000) == 0:
+                self.logger.debug('delta count = {}, bibcode = {}'.format(count, delta_row['bibcode']))
+            count += 1
         self.flush()
+        # need to close?
 
     # paper from 1988: 1988PASP..100.1134B
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
-        sql_sync = SqlSync(row_view_schema)
-        row_view = sql_sync.get_row_view(bibcode)
-        metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
+        sql_sync = row_view.SqlSync(row_view_schema)
+        row_view_bibcode = sql_sync.get_row_view(bibcode)
+        metrics_dict = self.row_view_to_metrics(row_view_bibcode, sql_sync)
         self.save(metrics_dict)
         self.flush()
 
@@ -232,17 +245,20 @@ class Metrics():
         step_size = 1000
         count = 0
         offset = start_offset
-        sql_sync = SqlSync(row_view_schema)
+        max_rows = self.config['MAX_ROWS']
+        sql_sync = row_view.SqlSync(row_view_schema)
         table = sql_sync.get_row_view_table()
         while True:
             s = select([table])
             s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
             connection = sql_sync.sql_sync_connection; 
             results = connection.execute(s)
-            for row_view in results:
-                metrics_dict = self.row_view_to_metrics(row_view, sql_sync)
+            for row_view_current in results:
+                metrics_dict = self.row_view_to_metrics(row_view_current, sql_sync)
                 self.save(metrics_dict)
                 count += 1
+                if max_rows > 0 and count > max_rows:
+                    break
                 if count % 100000 == 0:
                     self.logger.debug('metrics.py, metrics count = {}'.format(count))
                 if end_offset > 0 and end_offset <= (count + start_offset):
@@ -265,29 +281,29 @@ class Metrics():
     #  c = number of citations tha paper received (why not call it references?)
     #  c/a = normalized citations
     #  sum over N papers
-    def row_view_to_metrics(self, row_view, sql_sync):
+    def row_view_to_metrics(self, passed_row_view, sql_sync):
         """convert the passed row view into a complete metrics dictionary"""
         # first do easy fields
-        bibcode = row_view['bibcode']
+        bibcode = passed_row_view['bibcode']
         metrics_dict = {'bibcode': bibcode}
-        metrics_dict['id'] = row_view['id']
-        metrics_dict['refereed'] = row_view['refereed']
-        metrics_dict['citations'] = row_view['citations']
-        metrics_dict['reads'] = row_view['reads']
-        metrics_dict['downloads'] = row_view['downloads']
+        metrics_dict['id'] = passed_row_view['id']
+        metrics_dict['refereed'] = passed_row_view['refereed']
+        metrics_dict['citations'] = passed_row_view['citations']
+        metrics_dict['reads'] = passed_row_view['reads']
+        metrics_dict['downloads'] = passed_row_view['downloads']
         
-        metrics_dict['citation_num'] = len(row_view['citations']) if row_view['citations'] else 0
-        metrics_dict['author_num'] = max(len(row_view['authors']),1) if row_view['authors'] else 1
-        metrics_dict['reference_num'] = len(row_view['reference']) if row_view['reference'] else 0
+        metrics_dict['citation_num'] = len(passed_row_view['citations']) if passed_row_view['citations'] else 0
+        metrics_dict['author_num'] = max(len(passed_row_view['authors']),1) if passed_row_view['authors'] else 1
+        metrics_dict['reference_num'] = len(passed_row_view['reference']) if passed_row_view['reference'] else 0
 
-        #metrics_dict['citation_num'] = len(row_view.get('citations', [])
-        #metrics_dict['author_num'] = max(len(row_view.get('authors'),[]),1)
-        #metrics_dict['reference_num'] = len(row_view.get('reference'),[]) 
+        #metrics_dict['citation_num'] = len(passed_row_view.get('citations', [])
+        #metrics_dict['author_num'] = max(len(passed_row_view.get('authors'),[]),1)
+        #metrics_dict['reference_num'] = len(passed_row_view.get('reference'),[]) 
 
         # next deal with papers that cite the current one
         # compute histogram, normalized values of citations
         #  and create list of refereed citations
-        citations = row_view['citations']
+        citations = passed_row_view['citations']
         normalized_reference = 0.0
         citations_json_records = []
         refereed_citations = []
@@ -318,8 +334,8 @@ class Metrics():
         # annual citations
         today = datetime.today()
         resource_age = max(1.0, today.year - int(bibcode[:4]) + 1) 
-        metrics_dict['an_citations'] = float(metrics_dict['citation_num'] / resource_age)
-        metrics_dict['an_refereed_citations'] = float(metrics_dict['refereed_citation_num'] / resource_age)
+        metrics_dict['an_citations'] = float(metrics_dict['citation_num']) / float(resource_age)
+        metrics_dict['an_refereed_citations'] = float(metrics_dict['refereed_citation_num']) / float(resource_age)
 
         # normalized info
         metrics_dict['rn_citations'] = normalized_reference     # total_normalized_citations  
@@ -328,30 +344,28 @@ class Metrics():
         
         return metrics_dict
 
-    @staticmethod
-    def metrics_mismatch(bibcode, metrics1, metrics2):
+    def metrics_mismatch(self, bibcode, metrics2):
         """test function to compare metric records from two different databases"""
-        m1 = metrics1.read(bibcode)
-        #m2 = metrics2.read('1988PASP..100.1134B')
+        m1 = self.read(bibcode)
         m2 = metrics2.read(bibcode)
         if m1 == None or m2 == None:
-            return ['BibcodeNotFound:' + bibcode]
+            return ['BibcodeNotFound:' + bibcode + ' ' + m1 + ' ' + m2]
         mismatches = []
         fields = ('refereed', 'rn_citations', 'rn_citation_data', 'downloads',
                   'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
                   'reference_num', 'citations', 'refereed_citations', 'author_num', 
                   'an_refereed_citations')
         for field in fields:
-            if Metrics.field_mismatch(field, m1, m2): 
-                print 'mismatch', bibcode, field  # , m1[field], m2[field]
+            if self.field_mismatch(field, m1, m2): 
+                self.logger.error('field mismatch: bibcode {}, fieldname {}'.format(bibcode, field))
                 mismatches.append(field)
         
         if len(mismatches) > 0:
             return mismatches
         return False;
 
-    @staticmethod
-    def field_mismatch(fieldname, m1, m2):
+
+    def field_mismatch(self, fieldname, m1, m2):
         """test function to compare a field in two different metrics dictionaries"""
         # metrics database has sql null for some reads and downloads while new metrics has array of 0 values
         if m2[fieldname] == None and (m1[fieldname] == [] or m1[fieldname] == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]):
@@ -369,14 +383,14 @@ class Metrics():
             t2 = m2[fieldname][:-1]
             for v1,v2 in zip(t1, t2):
                 if v1 != v2:
-                    print fieldname, v1, v2
+                    self.logger.error('older year mismatch: fieldname {}, values {} {}'.format(fieldname, v1, v2))
                     return True;
             t1 = m1[fieldname][-1]
             t2 = m2[fieldname][-1]
             delta = abs(t1 - t2)
             limit = max(5, v1 * .15)
             if delta >  limit:
-                print fieldname, v1, v2
+                self.logger.error('current year mismatch: fieldname {}, values {} {}'.format(fieldname, v1, v2))
                 return True
             return False
 
@@ -384,8 +398,9 @@ class Metrics():
         if isinstance(m1[fieldname], list):
             delta = abs(len(m1[fieldname]) - len(m2[fieldname]))
             if delta > 0 and delta < 3:
-                print 'warning: list length', len(m1[fieldname]), len(m2[fieldname])
-            elif delta >= 3: 
+                self.logger.warning('array list length mismatch: {}, lengths {} {}'.format(fieldname, len(m1[fieldname]), len(m2[fieldname])))
+            elif delta > 3: 
+                self.logger.error('array list length mismatch: {}, lengths {} {}'.format(fieldname, len(m1[fieldname]), len(m2[fieldname])))
                 return True
 
             warning_count = 0
@@ -395,57 +410,57 @@ class Metrics():
                 for v in m1_bibs:
                     if v not in m2_bibs:
                         warning_count += 1
-                        print 'warning: list element missing', v
+                        self.logger.warning('array element missing from second fieldname {}, value {}'.format(fieldname, v))
                 for v in m2_bibs:
                     if v not in m1_bibs:
                         warning_count += 1
-                        print 'warning:: list element missing', v
+                        self.logger.warning('array element missing from first fieldname {}, value {}'.format(fieldname, v))
             else:
                 for v in m1[fieldname]:
                     if v not in m2[fieldname]:
                         warning_count += 1
-                        print 'warning: list element missing', v
-
+                        self.logger.warning('array element missing from second fieldname {}, value {}  .'.format(fieldname, v))
                 for v in m2[fieldname]:
                     if v not in m1[fieldname]:
                         warning_count += 1
-                        print 'warning:: list element missing', v
+                        self.logger.warning('array element missing from first fieldname {}, value {}  .'.format(fieldname, v))
 
             if warning_count > 3:
+                self.logger.error('array element missing from fieldname {}, count {}.'.format(fieldname, warning_count))
                 return True
 
             return False
 
         # otherwise, see if scalar values match
-        return Metrics.value_mismatch(m1[fieldname], m2[fieldname])
+        return self.value_mismatch(m1[fieldname], m2[fieldname])
 
-    @staticmethod
-    def value_mismatch(v1, v2):
+
+    def value_mismatch(self, v1, v2):
         """test function to compare to scalar values from two different metrics dictionaries"""
         if type(v1) != type(v2):
-            print 'type mismatch'
+            self.logger.error('type mismatch {} {}'.format(v1, v2))
             return True
 
         if v1 == None or v2 == None:
             if v1 == None and v2 == None: return False
-            print 'None mismatch'
+            self.logger.error('mismatch on None {} {}'.format(v1, v2))
             return True
 
         if isinstance(v1,(str, unicode)):
             mismatch = v1 != v2
             if mismatch:
-                print 'mismatch'
-                print v1
-                print v2
+                self.logger.error('str/unicode value mismatch {} {}'.format(v1, v2))
             return mismatch
 
         if isinstance(v1, bool):
+            if v1 != v2:
+                self.logger.error('bool value mismatch {} {}'.format(v1, v2))
             return v1 != v2
         if isinstance(v1, (int, float)):
             delta = abs(v1 - v2)
             limit = 5  # max(abs(v1), abs(v2)) * .15
             if (delta > limit):
-                print 'mismatch', v1, v2 
+                self.logger.error('numeric value mismatch {} {}'.format(v1, v2))
                 return True
             else:
                 return False
@@ -453,11 +468,11 @@ class Metrics():
             k1 = v1.keys()
             k2 = v2.keys()
             if len(k1) != len(k2): 
-                print 'mismatch', v1, v2 
+                self.logger.error('dict mismatch differing lengths {} {}'.format(v1, v2))
                 return True
             for k in k1:
                 if v1[k] != v2[k]: 
-                    print 'mismatch', k, v1, v2
+                    self.logger.error('dict mismatch values differ, key:{} value1:{} value2:{}'.format(k, v1, v2))
                     return True
             return False
         raise ValueError('Unexpected data type passed to value_mismatch,type = ' + str(type(v1)))
@@ -476,7 +491,15 @@ if __name__ == "__main__":
     parser.add_argument('-startOffset', default=1, help='offset into list of bibcodes to process for chunking support')
     parser.add_argument('-endOffset', default=-1, help='when to stop processing list of bibcodes for chunking support')
     
+    global config
+    config = {}
     args = parser.parse_args()
+
+    config.update(utils.load_config())
+    global logger
+    logger = utils.setup_logging('AdsDataSqlSync', 'AdsDataSqlSync', config['LOGGING_LEVEL'])
+    logger.info('starting metrics with {}'.format(args.command))
+
     if args.command == 'metricsCompute' and args.bibcode:
         m = Metrics(args.metricsSchema,from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
         m.update_metrics_test(args.bibcode, args.rowViewSchema)
@@ -491,16 +514,21 @@ if __name__ == "__main__":
         m.update_metrics_all(args.rowViewSchema, start_offset=int(args.startOffset), end_offset=int(args.endOffset))
 
     elif args.command == 'metricsCompare' and args.bibcode:
-        metrics1 = Metrics(args.metricsSchema, METRICS_DATABASE)
-        metrics2 = Metrics('', METRICS_DATABASE2)
+        m = Metrics(args.metricsSchema) 
+        # for now, hard code other metrics db
+        metrics2 = Metrics('public', {'METRICS_DATABASE': config.get('METRICS_DATABASE2')})
         if (args.bibcode == 'stdin'):
             while True:
                 line = sys.stdin.readline()
                 if len(line) == 0: break
-                mismatch = Metrics.metrics_mismatch(line.strip(), metrics1, metrics2)
+                mismatch = m.metrics_mismatch(line.strip(), metrics2)
                 if mismatch:
+                    m.logger.error('MISMATCH: {} {}'.format(line.strip(), mismatch))
                     print line.strip(), ' MISMATCH = ', mismatch
         else:
-            mismatch = Metrics.metrics_mismatch(args.bibcode, metrics1, metrics2)
+            mismatch = m.metrics_mismatch(args.bibcode, metrics2)
+            m.logger.error('MISMATCH: {}'.format(mismatch))
             print 'mismatch = ', mismatch
+
+    logger.info('completed metrics with {}'.format(args.command))
 

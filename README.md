@@ -47,6 +47,7 @@ python app.py createJoinedRows --rowViewSchemaName ingestc
 python app.py createMetricsTable --rowViewSchemaName metricsc
 python app.py populateMetricsTableMeta --metricsSchemaName metricsc --rowViewSchemaName ingestc
 ```
+all of this can be preformed with the `runPipeline` command.
 
 We use Postgres database schemas to hold separate versions of the
 data.  In the above example, data goes into the schems named IngestC
@@ -65,10 +66,8 @@ standard out.  Postgres will take these pairs and make new rows in the
 author table.  This self-referential nature may be confusing, but
 copy from program is the fastest way to bulk ingest data into Postgres.  
 
-Python code in
-metrics/metrics.py reads converts each row in the materialized view
+Python code in metrics.py reads converts each row in the materialized view
 into a row in the metrics database.  
-
 
 This repository also contains a script to generate test data:
 test/scripts/createTestColumnFiles.sh.  It takes thress arguments.
