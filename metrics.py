@@ -75,8 +75,8 @@ class Metrics():
         if meta is None:
             meta = self.meta
         return Table('metrics', meta,
-                     Column('id', Integer, primary_key=True),
-                     Column('bibcode', String, nullable=False, index=True, unique=True),
+                     Column('id', Integer(), primary_key=True, autoincrement=True),
+                     Column('bibcode', String, nullable=False, index=True),
                      Column('refereed',Boolean),
                      Column('rn_citations', postgresql.REAL),
                      Column('rn_citation_data', postgresql.JSON),
@@ -92,14 +92,14 @@ class Metrics():
                      Column('author_num', Integer),
                      Column('an_refereed_citations', postgresql.REAL),
                      Column('modtime', DateTime),
+                     extend_existing=True,
                      schema=self.schema)
-    #extend_existing=True) 
+    
 
     def create_metrics_table(self):
+        self.logger.info('!! in create_metrics_table')
         self.engine.execute(CreateSchema(self.schema))
-        temp_meta = MetaData()
-        table = self.get_metrics_table(temp_meta)
-        temp_meta.create_all(self.engine)
+        self.meta.create_all(self.engine)
         self.logger.info('metrics.py, metrics table created')
 
     def rename_schema(self, new_name):
@@ -176,7 +176,38 @@ class Metrics():
         if len(updates):
             result = self.connection.execute(self.u, updates)
         if len(inserts):
-            result = self.connection.execute(self.table.insert(), inserts)
+            # below is a hack to explictly set the id for the new rows in the metrics table
+            # I was unable to get the field to autoincrement.  the error was:
+            #   sqlalchemy.exc.IntegrityError: (psycopg2.IntegrityError) duplicate key value violates unique constraint "metrics_pkey"
+            #   DETAIL:  Key (id)=(1) already exists.
+            q = 'select MAX(id) from {}.metrics;'.format(self.schema);
+            r = self.connection.execute(q)
+            self.logger.info('s = {}'.format(r))
+            last_id = r.scalar()
+            count = 1
+            for i in inserts:
+                i['id'] = last_id + count
+                ins = self.table.insert().values(id=i['id'], bibcode=i['bibcode'], refereed=i['refereed'],
+                                                 rn_citations=i['rn_citations'], rn_citation_data=i['rn_citation_data'],
+                                                 downloads=i['downloads'], reads=i['reads'], an_citations=i['an_citations'],
+                                                 refereed_citation_num=i['refereed_citation_num'], citation_num=i['citation_num'],
+                                                 reference_num=i['reference_num'], citations=i['citations'],
+                                                 refereed_citations=i['refereed_citations'], author_num=i['author_num'],
+                                                 an_refereed_citations=i['an_refereed_citations'])
+                                                        
+                self.connection.execute(ins)
+                count += 1
+            #ins = self.table.insert().values(bibcode='1556tbeu.book.....G', id=last_id+1)
+            #result = self.connection.execute(ins)
+
+            #result = self.connection.execute(self.table.insert(), inserts)
+            #for i in inserts:
+            #    ins = self.table.insert().values(i)
+            #    x = ins.compile().params
+            #    self.logger.info('insert args {}'.format(x))
+            #    result = self.connection.execute(ins)
+            #    self.logger.info('metrics inserting, results {}'.format(result))
+            
 
         self.upserts = []
 
@@ -194,17 +225,32 @@ class Metrics():
         delta_sync = row_view.SqlSync(row_view_schema)
         delta_table = delta_sync.get_delta_table()
         sql_sync = row_view.SqlSync(row_view_schema)
-        row_view_table = sql_sync.get_row_view_table()
         connection = sql_sync.sql_sync_engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
+        self.update_metrics_aux(results, sql_sync)
+
+    def update_metrics_new(self, row_view_schema='ingest'):  #, delta_schema='delta'):
+        """changed bibcodes are in sql table, for each we update metrics record"""
+        self.copy_from_program = False  # maybe hack
+        new_sync = row_view.SqlSync(row_view_schema)
+        new_table = new_sync.get_new_bibcodes_table()
+        sql_sync = row_view.SqlSync(row_view_schema)
+        connection = sql_sync.sql_sync_engine.connect()
+        s = select([new_table])
+        results = connection.execute(s)
+        self.update_metrics_aux(results, sql_sync)
+
+
+    def update_metrics_aux(self,results, sql_sync):
+        """loop over new or changed bibcodes and udpate metrics"""
         count = 0
-        for delta_row in results:
-            row = sql_sync.get_row_view(delta_row['bibcode'])
+        for current_row in results:
+            row = sql_sync.get_row_view(current_row['bibcode'])
             metrics_dict = self.row_view_to_metrics(row, sql_sync)
             self.save(metrics_dict)
             if (count % 10000) == 0:
-                self.logger.debug('delta count = {}, bibcode = {}'.format(count, delta_row['bibcode']))
+                self.logger.debug('aux count = {}, bibcode = {}'.format(count, current_row['bibcode']))
             count += 1
         self.flush()
         # need to close?

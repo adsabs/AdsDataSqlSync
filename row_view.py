@@ -110,6 +110,36 @@ class SqlSync:
                      Column('bibcode', String, primary_key=True),
                      schema=self.schema_name) 
 
+    def get_new_bibcodes_table(self, meta=None):
+        """ table holds list of bibcodes that are not in baseline"""
+        if meta is None:
+            meta = self.meta
+        return Table('newbibcodes', meta,
+                     Column('bibcode', String, primary_key=True),
+                     schema=self.schema_name)
+
+    def build_new_bibcodes(self, baseline_schema):
+        self.logger.info('row_view, dropping and creating new_bibcodes table in schema {}'.format(self.schema_name))
+        self.sql_sync_engine.execute("drop table  if exists {}.newbibcodes;".format(self.schema_name))
+        temp_meta = MetaData()
+        table = self.get_new_bibcodes_table(temp_meta)
+        temp_meta.create_all(self.sql_sync_engine)
+        
+        self.logger.info('row_view, created new_bibcodes table in schema {}'.format(self.schema_name))
+
+        self.logger.info('row_view, populating new_bibcodes table in schame {}'.format(self.schema_name))
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        sql_command = SqlSync.populate_new_bibcodes_sql.format(self.schema_name, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        sess.close()
+        self.logger.info('row_view, populated new_bibcodes table in schame {}'.format(self.schema_name))
+
+
+        
+
+
     def log_delta_reasons(self, baseline_schema):
         """log the counts for the changes in each column from baseline """
         Session = sessionmaker()
@@ -366,8 +396,11 @@ class SqlSync:
 	   or {0}.RowViewM.downloads!={1}.RowViewM.downloads \
 	   or {0}.RowViewM.reads!={1}.RowViewM.reads);'
 
-
-
+    populate_new_bibcodes_sql = \
+        'insert into {0}.newbibcodes (bibcode) \
+            select {0}.canonical.bibcode from {0}.canonical left join {1}.canonical \
+            on {0}.canonical.bibcode = {1}.canonical.bibcode \
+            where {1}.canonical.bibcode IS NULL;'
 
 
 

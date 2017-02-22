@@ -65,7 +65,7 @@ def main():
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
                         + ' | runRowViewPipeline | runMetricsPipeline ' \
-                        + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
+                        + ' | runRowViewPipelineDelta | runMetricsPipelineDelta | createNewBibcodes '\
                         + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
@@ -157,6 +157,9 @@ def main():
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
+    elif args.command == 'createNewBibcodes' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.build_new_bibcodes(args.rowViewBaselineSchemaName)
     elif args.command == 'queueAllBibcodes' and args.rowViewSchemaName:
         q = queue.Queue(args.rowViewSchemaName, config)
         q.add_all_bibcodes()
@@ -238,9 +241,11 @@ def main():
 
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+        sql_sync.build_new_bibcodes(args.rowViewBaselineSchemaName)
 
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
         m.update_metrics_changed(args.rowViewSchemaName)
+        m.update_metrics_new(args.rowViewSchemaName)
 
 
     else:
