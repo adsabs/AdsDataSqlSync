@@ -15,7 +15,7 @@ logger = None
 config = {}
 
 
-def load_column_files(sql_sync):
+def load_column_files(sql_sync, config):
     """ generate and run sql 'copy from program' commands to load column files
     and, create joined row view 
     note that the copy from program command actually runs this python code with different arguments
@@ -24,11 +24,12 @@ def load_column_files(sql_sync):
     sess = Session(bind=sql_sync.sql_sync_connection)
     for t in row_view.SqlSync.all_types:
         command_args = ' --fileType ' + t +   \
+                       ' --dataPath ' + config['DATA_PATH'] +  \
                        ' --rowViewSchemaName ' + sql_sync.schema_name + ' ingest'
         python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
         sql_command = 'copy ' + sql_sync.schema_name + '.' + t +  \
                       ' from program ' + python_command + ';'
-
+        logger.info('ingest copy from sql command: {}'.format(sql_command))
         sess.execute(sql_command)
         sess.commit()
     sess.close()
@@ -45,7 +46,7 @@ def load_metrics(m, row_view_schema):
     python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
     sql_command = 'copy ' + m.schema + '.metrics'   \
                   + ' from program ' + python_command + ';'
-    
+    logger.info('metrics copy from sql command: {}'.format(sql_command))
     sess.execute(sql_command)
     sess.commit()
     sess.close()
@@ -60,6 +61,7 @@ def main():
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-b', '--rowViewBaselineSchemaName', default='baseline', 
                         help='name of old postgres schema, used to compute delta')
+    parser.add_argument('-d', '--dataPath', default=None, help='override default data dir in config file')        
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
@@ -71,6 +73,8 @@ def main():
     args = parser.parse_args()
 
     config.update(utils.load_config())
+    if args.dataPath is not None:
+        config['DATA_PATH'] = args.dataPath
 
     global logger
     logger = utils.setup_logging('AdsDataSqlSync', 'AdsDataSqlSync', config['LOGGING_LEVEL'])
@@ -115,7 +119,7 @@ def main():
             python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
             sql_command = 'copy ' + args.rowViewSchemaName + '.' + t +  \
                 ' from program ' + python_command + ';'
-
+            logger.info('ingest copy from sql command, {}'.format(sql_command))
             sess.execute(sql_command)
             sess.commit()
 
@@ -180,7 +184,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
-        load_column_files(sql_sync)
+        load_column_files(sql_sync, config)
 
     elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
@@ -200,7 +204,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_column_tables()
        
-        load_column_files(sql_sync)
+        load_column_files(sql_sync, config)
 
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
@@ -216,7 +220,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
-        load_column_files(sql_sync)
+        load_column_files(sql_sync, config)
 
 
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
@@ -237,7 +241,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_column_tables()
        
-        load_column_files(sql_sync)
+        load_column_files(sql_sync, config)
 
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
