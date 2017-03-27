@@ -132,7 +132,7 @@ def main():
         m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table()
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': True})
+        m = metrics.Metrics(None, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
         m.update_metrics_all(args.rowViewSchemaName)
     elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})

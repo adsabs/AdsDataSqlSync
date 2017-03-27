@@ -80,7 +80,7 @@ class Metrics():
                      Column('refereed',Boolean),
                      Column('rn_citations', postgresql.REAL),
                      Column('rn_citation_data', postgresql.JSON),
-                     # Column('rn_citations_hist', postgresql.JSON),
+                     Column('rn_citations_hist', postgresql.JSON),
                      Column('downloads', postgresql.ARRAY(Integer)),
                      Column('reads', postgresql.ARRAY(Integer)),
                      Column('an_citations', postgresql.REAL),
@@ -142,7 +142,7 @@ class Metrics():
         self.upserts.append(values_dict)
 
         self.tmp_count += 1
-        if (self.tmp_count % 100) != 0:
+        if (self.tmp_count % 100) == 0:
             self.flush()
             self.tmp_count = 0
 
@@ -305,7 +305,7 @@ class Metrics():
                 count += 1
                 if max_rows > 0 and count > max_rows:
                     break
-                if count % 100000 == 0:
+                if count % 1000 == 0:
                     self.logger.debug('metrics.py, metrics count = {}'.format(count))
                 if end_offset > 0 and end_offset <= (count + start_offset):
                     # here if we processed the last requested row
@@ -353,6 +353,7 @@ class Metrics():
         normalized_reference = 0.0
         citations_json_records = []
         refereed_citations = []
+        citations_histogram = defaultdict(float)
         total_normalized_citations = 0.0
         if citations:
             q = 'select refereed,array_length(reference,1),bibcode from ' + sql_sync.schema_name + '.RowViewM where bibcode in (select unnest(citations) from ' + sql_sync.schema_name + '.RowViewM where bibcode=%s);'
@@ -364,6 +365,7 @@ class Metrics():
                 citation_bibcode = row[2]
 
                 citation_normalized_references = 1.0 / float(max(5, len_citation_reference))
+                total_normalized_citations += citation_normalized_references
                 normalized_reference += citation_normalized_references
                 tmp_json = {"bibcode":  citation_bibcode.encode('utf-8'),
                             "ref_norm": citation_normalized_references,
@@ -373,7 +375,8 @@ class Metrics():
                 citations_json_records.append(tmp_json)
                 if (citation_refereed):
                     refereed_citations.append(citation_bibcode)
-
+                citations_histogram[citation_bibcode[:4]] += total_normalized_citations
+ 
         metrics_dict['refereed_citations'] = refereed_citations
         metrics_dict['refereed_citation_num'] = len(refereed_citations)
 
@@ -386,8 +389,9 @@ class Metrics():
         # normalized info
         metrics_dict['rn_citations'] = normalized_reference     # total_normalized_citations  
         metrics_dict['rn_citation_data'] = citations_json_records
-        # metrics_dict['rn_citations_hist'] = citations_histogram
-        
+        metrics_dict['rn_citations_hist'] = dict(citations_histogram)
+        metrics_dict['modtime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
         return metrics_dict
 
     def metrics_mismatch(self, bibcode, metrics2):
