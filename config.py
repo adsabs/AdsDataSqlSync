@@ -41,3 +41,20 @@ MAX_ROWS = -1
 RABBITMQ_URL = 'amqp://@adsx:5672/BumblebeeETL'
 RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
 RABBITMQ_ROUTE = 'SolrUpdateRoute'
+
+# based on ADSimmportpipleine.config.py
+#CELERY_BROKER = 'pyamqp://guest@localhost:6672/new_host'
+CELERY_BROKER = 'pyamqp://foo.bar/metrics'
+
+# ================= celery/rabbitmq rules============== #
+# ##################################################### #
+
+ACKS_LATE=True
+PREFETCH_MULTIPLIER=1
+CELERYD_TASK_SOFT_TIME_LIMIT = 60
+xCELERY_BROKER_URL='redis://localhost:6379/0'
+xCELERY_RESULT_BACKEND='redis://localhost:6379/0'
+
+CELERY_DEFAULT_EXCHANGE = 'import-pipeline'
+CELERY_DEFAULT_EXCHANGE_TYPE = "topic"
+
