@@ -2,6 +2,8 @@ from __future__ import absolute_import, unicode_literals
 from celery import Celery
 from celery.utils.log import get_task_logger
 from celery import Task
+from celery.signals import worker_process_init
+from celery.signals import worker_process_shutdown
 from kombu import Exchange, Queue
 import argparse
 
@@ -12,11 +14,11 @@ import utils
 from metrics import Metrics
 
 # Code for updating the metrics rds-based Postgres instance
-# This code follows ADSimportpipeline/aip
+# This code is based on Celery usage in ADSimportpipeline/aip
 
 # run the workers with:
-# root@adsqb:/app# celery -A metricsUpdater.app worker -l info
-# queue data with:
+# root@adsqb:/app# celery -A metricsUpdater.app worker -l info --concurrency=5
+# queue data from bibcode file with:
 # >>> import metricsUpdater.app
 # >>> metricsUpdater.app.queue_metrics('/tmp/testBibcodes1.txt')
 
@@ -54,16 +56,17 @@ def task_foo(a, b):
                     
 @app.task(base=MyTask, queue='update-metrics')
 def task_update_metrics(metrics_records):
-    """receives a set of full metrics records, updates rds based metrics
-    passed metrics_records should contain an array of full metrics dict records
+    """receives a set of full metrics records, updates rds based metrics Postgres instance
     
+    metrics record includes primary key index field, staging value will not match rds database
     """
-    logger.info('in task_update_metrics with {} records'.format(len(metrics_records)))
-    metrics_rds = Metrics('', {'METRICS_DATABASE': 'postgresql://foo.bar/metrics'})
+    
+    global metrics_rds
+    logger.info('in task_update_metrics with {} records and db {}'.format(len(metrics_records), metrics_rds))
     database_buffer = []
     for current in metrics_records:
         bibcode = current['bibcode']
-        # create and populate new dict with info for current 
+        # create and populate new dict with info from passed param
         save_dict = {'bibcode': bibcode}
         copy_fields = ('refereed', 'rn_citations', 'rn_citation_data', 'rn_citations_hist', 'downloads',
                        'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
@@ -79,7 +82,7 @@ def task_update_metrics(metrics_records):
         # read existing record from rds
         r = metrics_rds.read(bibcode)
         if r:
-            # here if there is an existing record in the rds database, we need to update it
+            # here if there is an existing record in the rds database, we need to do sql update
             save_dict['id'] = r['id']
             save_dict['tmp_bibcode'] = bibcode
             database_buffer.append(save_dict)
@@ -98,9 +101,26 @@ def task_update_metrics(metrics_records):
             
 
 
+metrics_rds = None
 
+# use one database conection per worker
+# http://stackoverflow.com/questions/14526249/celery-worker-database-connection-pooling
+@worker_process_init.connect
+def init_worker(**kwargs):
+    global metrics_rds
+    logger.info('in init_worker, creating database')
+    metrics_rds = Metrics('', {'METRICS_DATABASE': 'postgresql://foo/metrics'})
+
+
+@worker_process_shutdown.connect
+def shutdown_worker(**kwargs):
+    global metrics_rds
+    if metrics_rds:
+        logger.info('in shutdown_worker, should we close database?')
+
+        
 def queue_metrics(bibcodes_filename):
-    """read list of changed bibcodes from file, get full records from database and queue them for delivery to rds-based instance
+    """read list of changed bibcodes from file, get full records from database and queue them for delivery
     full records come from the localhost Postgres database
     """
     logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
@@ -119,11 +139,14 @@ def queue_metrics(bibcodes_filename):
             return
         bibcode = line.strip()
         metrics_current = metrics_db.read(bibcode)
-        d = dict(metrics_current.items())
-        metrics_buffer.append(d)
-        if len(metrics_buffer) >= 100:
-            task_update_metrics.delay(metrics_buffer)
-            metrics_buffer = []
+        if metrics_current:
+            d = dict(metrics_current.items())
+            metrics_buffer.append(d)
+            if len(metrics_buffer) >= 100:
+                task_update_metrics.delay(metrics_buffer)
+                metrics_buffer = []
+        else:
+            logger.info('bibcode has not metrics entry {}'.format(bibcode))
 
 
 
