@@ -52,6 +52,24 @@ class SqlSync:
         
         self.logger = logging.getLogger('AdsDataSqlSync')
 
+        self.table = self.get_row_view_table()
+        self.u = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
+            values ({'bibcode': bindparam('bibcode'),
+                     'id': bindparam('id'),
+                     'authors': bindparam('authors'),
+                     'refereed': bindparam('refereed'),
+                     'simbad_objects': bindparam('simbad_objects'),
+                     'grants': bindparam('grants'),
+                     'citations': bindparam('citations'),
+                     'boost': bindparam('boost'),
+                     'citation_count': bindparam('citation_count'),
+                     'read_count': bindparam('read_count'),
+                     'norm_cites': bindparam('norm_cites'),
+                     'readers': bindparam('readers'),
+                     'downloads': bindparam('downloads'),
+                     'reads': bindparam('reads'),
+                     'reference': bindparam('reference')})
+
 
     def create_column_tables(self):
         self.sql_sync_engine.execute(CreateSchema(self.schema_name))
