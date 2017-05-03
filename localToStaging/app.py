@@ -17,7 +17,7 @@ from row_view import SqlSync
 # This code is based on Celery usage in ADSimportpipeline/aip
 
 # run the workers with:
-# root@adsqb:/app# celery -A localToStaging/app worker -l info --concurrency=5
+# root@adsqb:/app# celery -A localToStaging.app worker -l info --concurrency=5
 # queue data from bibcode file with:
 # >>> import localToStaging.app
 # >>> localToStaging.app.queue_bibcodes('/tmp/testBibcodes1.txt')
@@ -114,16 +114,19 @@ def init_worker(**kwargs):
 def shutdown_worker(**kwargs):
     global nonbib_sink
     if nonbib_sink:
-        logger.info('in shutdown_worker, should we close database?')
+        nonbib_sink.sql_sync_connection.close()
+        logger.info('in shutdown_worker, closed database connection')
 
         
 def queue_bibcodes(bibcodes_filename):
     """read list of changed bibcodes from file, get full records from database and queue them for delivery
     full records come from the localhost Postgres database
     """
+    print 'hey'
     logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
     nonbib_source =  SqlSync('nonbib', {'INGEST_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-    update_buffer = []
+    bibcodes = []
+    final_flag = False
     f = open(bibcodes_filename)
     if f is None:
         logger.error('could not open {}'.format(bibcodes_filename))
@@ -131,20 +134,25 @@ def queue_bibcodes(bibcodes_filename):
     while True:
         line = f.readline()
         if len(line) == 0:
-            logger.info('final saving {} records'.format(len(update_buffer)))
-            if len(update_buffer) > 0:
-                task_update_nonbib_staging.delay(update_buffer)
-            return
-        bibcode = line.strip()
-        update_current = nonbib_source.get_row_view(bibcode)
-        if update_current:
-            d = dict(update_current.items())
-            update_buffer.append(d)
-            if len(update_buffer) >= 100:
-                task_update_nonbib_staging.delay(update_buffer)
-                update_buffer = []
+            final_flag = True
         else:
-            logger.info('bibcode has no nonbib entry {}'.format(bibcode))
+            bibcode = line.strip()
+            bibcodes.append(bibcode)
+
+        if len(bibcodes) >= 100 or final_flag:
+            logger.info('time to save data for {} bibcodes'.format(len(bibcodes)))
+            if len(bibcodes) > 0:
+                db_records = nonbib_source.get_by_bibcodes(bibcodes)
+                update_buffer = []
+                for db_record in db_records:
+                    update_buffer.append(dict(db_record))
+                task_update_nonbib_staging.delay(update_buffer)
+            logger.info('added {} records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
+            bibcodes = []
+            
+        if final_flag:
+            nonbib_source.sql_sync_connection.close()
+            return
 
 
 

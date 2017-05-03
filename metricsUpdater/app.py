@@ -62,7 +62,8 @@ def task_update_metrics(metrics_records):
     """
     
     global metrics_rds
-    logger.info('in task_update_metrics with {} records and db {}'.format(len(metrics_records), metrics_rds))
+    logger.info('in task_update_metrics with {} records'.format(len(metrics_records)))
+    #metrics_rds = Metrics('', {'METRICS_DATABASE': ''})
     database_buffer = []
     for current in metrics_records:
         bibcode = current['bibcode']
@@ -109,14 +110,15 @@ metrics_rds = None
 def init_worker(**kwargs):
     global metrics_rds
     logger.info('in init_worker, creating database')
-    metrics_rds = Metrics('', {'METRICS_DATABASE': 'postgresql://foo/metrics'})
+    metrics_rds = Metrics('', {'METRICS_DATABASE': ''})
 
 
 @worker_process_shutdown.connect
 def shutdown_worker(**kwargs):
     global metrics_rds
     if metrics_rds:
-        logger.info('in shutdown_worker, should we close database?')
+        metrics_rds.connection.close()
+        logger.info('in shutdown_worker, closed database connection')
 
         
 def queue_metrics(bibcodes_filename):
@@ -125,7 +127,8 @@ def queue_metrics(bibcodes_filename):
     """
     logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
     metrics_db =  Metrics('metrics', {'METRICS_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-    metrics_buffer = []
+    bibcodes = []
+    final_flag = False
     f = open(bibcodes_filename)
     if f is None:
         logger.error('could not open {}'.format(bibcodes_filename))
@@ -133,20 +136,25 @@ def queue_metrics(bibcodes_filename):
     while True:
         line = f.readline()
         if len(line) == 0:
-            logger.info('final saving {} records'.format(len(metrics_buffer)))
-            if len(metrics_buffer) > 0:
-                task_update_metrics.delay(metrics_buffer)
-            return
-        bibcode = line.strip()
-        metrics_current = metrics_db.read(bibcode)
-        if metrics_current:
-            d = dict(metrics_current.items())
-            metrics_buffer.append(d)
-            if len(metrics_buffer) >= 100:
-                task_update_metrics.delay(metrics_buffer)
-                metrics_buffer = []
+            final_flag = True
         else:
-            logger.info('bibcode has not metrics entry {}'.format(bibcode))
+            bibcode = line.strip()
+            bibcodes.append(bibcode)
+
+        if len(bibcodes) >= 100 or final_flag:
+            logger.info('time to queue metrics data for {} bibcodes'.format(len(bibcodes)))
+            if len(bibcodes) > 0:
+                db_records = metrics_db.get_by_bibcodes(bibcodes)
+                update_buffer = []
+                for db_record in db_records:
+                    update_buffer.append(dict(db_record))
+                task_update_metrics.delay(update_buffer)
+            logger.info('added {} metrics records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
+            bibcodes = []
+            
+        if final_flag:
+            metrics_db.connection.close()
+            return
 
 
 

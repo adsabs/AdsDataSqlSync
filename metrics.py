@@ -65,7 +65,7 @@ class Metrics():
                      'citations': bindparam('citations'),
                      'refereed_citations': bindparam('refereed_citations'),
                      'author_num': bindparam('author_num'),
-                     'an_refereed_citations': bindparam('author_num')})
+                     'an_refereed_citations': bindparam('an_refereed_citations')})
 
         self.tmp_count = 0
         self.tmp_update_buffer = []
@@ -218,6 +218,15 @@ class Metrics():
         r = self.connection.execute(s)
         first = r.first()
         return first
+
+    def get_by_bibcodes(self, bibcodes):
+        """ return a list of metrics datbase objects matching the list of passed bibcodes"""
+        Session = sessionmaker()
+        sess = Session(bind=self.connection)
+        x = sess.execute(select([self.table], self.table.c.bibcode.in_(bibcodes))).fetchall()
+        sess.close()
+        return x
+
 
     def update_metrics_changed(self, row_view_schema='ingest'):  #, delta_schema='delta'):
         """changed bibcodes are in sql table, for each we update metrics record"""

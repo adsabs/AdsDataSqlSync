@@ -338,6 +338,15 @@ class SqlSync:
         first = row_view_result.first()
         return first
 
+    def get_by_bibcodes(self, bibcodes):
+        """ return a list of row view datbase objects matching the list of passed bibcodes"""
+        Session = sessionmaker()
+        sess = Session(bind=self.sql_sync_connection)
+        x = sess.execute(select([self.row_view_table], self.row_view_table.c.bibcode.in_(bibcodes))).fetchall()
+        sess.close()
+        return x
+
+
     def verify(self, data_dir):
         """verify that the data was properly read in
         we only check files that don't repeat bibcodes, so the
