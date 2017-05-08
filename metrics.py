@@ -413,7 +413,7 @@ class Metrics():
         fields = ('refereed', 'rn_citations', 'rn_citation_data', 'downloads',
                   'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
                   'reference_num', 'citations', 'refereed_citations', 'author_num', 
-                  'an_refereed_citations')
+                  'an_refereed_citations', 'rn_citations_hist')
         for field in fields:
             if self.field_mismatch(field, m1, m2): 
                 self.logger.error('field mismatch: bibcode {}, fieldname {}'.format(bibcode, field))
