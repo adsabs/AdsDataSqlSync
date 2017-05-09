@@ -4,9 +4,11 @@ from celery.utils.log import get_task_logger
 from celery import Task
 from celery.signals import worker_process_init
 from celery.signals import worker_process_shutdown
-from kombu import Exchange, Queue
-import argparse
+from celery import bootsteps
+from celery.bin import Option
+from celery import current_app
 
+from kombu import Exchange, Queue
         
 import sys
 sys.path.append("..")
@@ -18,19 +20,20 @@ from metrics import Metrics
 
 # run the workers with:
 # root@adsqb:/app# celery -A metricsUpdater.app worker -l info --concurrency=5
-# queue data from bibcode file with:
-# >>> import metricsUpdater.app
-# >>> metricsUpdater.app.queue_metrics('/tmp/testBibcodes1.txt')
+# root@adsqb:/app# celery -A metricsUpdater.app worker -l info --concurrency=5  --schema=staging --database=localhost
+# queue data from bibcode using queue_cli
 
 logger = get_task_logger('AdsDataSqlSync')
 conf = utils.load_config()
 
+global metrics_rds
+global database_connection_string
+global schema_name
 
 # celery configuration mostly from ADSimportpipeline/aip/app.py
 app = Celery('AdsDataSqlSync',
              broker=conf.get('CELERY_BROKER', 'pyamqp://'),
              include=['metricsUpdater.app'])
-
 
 exch = Exchange(conf.get('CELERY_DEFAULT_EXCHANGE', 'import-pipeline'), type=conf.get('CELERY_DEFAULT_EXCHANGE_TYPE', 'topic'))
 
@@ -39,9 +42,36 @@ app.conf.CELERY_QUEUES = (
     Queue('update-metrics', exch, routing_key='update-metrics')
 )
 
+
+
+# command line args based on http://docs.celeryproject.org/en/latest/userguide/extending.html#adding-new-command-line-options
+# tell workers where to write to
+def add_worker_arguments(parser):
+    logger.info('adding worker arguments')
+    parser.add_argument(
+        '--schema', action='store', default='staging',
+        help='schema identifier: tmp | staging | rds')
+    parser.add_argument(
+        '--database', action='store', default='staging',
+        help='database identifier: localhost | test | prod',    
+        
+    ),
+app.user_options['worker'].add(add_worker_arguments)
+
+class MyBootstep(bootsteps.Step):
+    def __init__(self, worker, database='localhost', schema='staging', **options):
+        global database_connection_string
+        database_connection_string = conf['METRICS_CONNECTIONS'][database]
+        global schema_name
+        schema_name = conf['METRICS_SCHEMA_NAMES'][schema]
+        logger.info('in MyBootstep with database {} and schema {}, {} and {}'.format(database_connection_string, schema_name, database, schema))
+            
+app.steps['worker'].add(MyBootstep)
+
+
 app.conf.update(conf)
 
-
+                                    
 class MyTask(Task):
     def on_failure(self, exc, task_id, args, kwargs, einfo):
             logger.error('{0!r} failed: {1!r}'.format(task_id, exc))
@@ -63,7 +93,6 @@ def task_update_metrics(metrics_records):
     
     global metrics_rds
     logger.info('in task_update_metrics with {} records'.format(len(metrics_records)))
-    #metrics_rds = Metrics('', {'METRICS_DATABASE': ''})
     database_buffer = []
     for current in metrics_records:
         bibcode = current['bibcode']
@@ -108,9 +137,13 @@ metrics_rds = None
 # http://stackoverflow.com/questions/14526249/celery-worker-database-connection-pooling
 @worker_process_init.connect
 def init_worker(**kwargs):
+    """ open database connection to write new records"""
     global metrics_rds
+    global database_connection_string
+    global schema_name
     logger.info('in init_worker, creating database')
-    metrics_rds = Metrics('', {'METRICS_DATABASE': ''})
+    print 'in init_worker, database {}, schema {}'.format(database_connection_string, schema_name)
+    metrics_rds = Metrics(schema_name, {'METRICS_DATABASE': database_connection_string})
 
 
 @worker_process_shutdown.connect
@@ -121,43 +154,6 @@ def shutdown_worker(**kwargs):
         logger.info('in shutdown_worker, closed database connection')
 
         
-def queue_metrics(bibcodes_filename):
-    """read list of changed bibcodes from file, get full records from database and queue them for delivery
-    full records come from the localhost Postgres database
-    """
-    logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
-    metrics_db =  Metrics('metrics', {'METRICS_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-    bibcodes = []
-    final_flag = False
-    f = open(bibcodes_filename)
-    if f is None:
-        logger.error('could not open {}'.format(bibcodes_filename))
-        return
-    while True:
-        line = f.readline()
-        if len(line) == 0:
-            final_flag = True
-        else:
-            bibcode = line.strip()
-            bibcodes.append(bibcode)
-
-        if len(bibcodes) >= 100 or final_flag:
-            logger.info('time to queue metrics data for {} bibcodes'.format(len(bibcodes)))
-            if len(bibcodes) > 0:
-                db_records = metrics_db.get_by_bibcodes(bibcodes)
-                update_buffer = []
-                for db_record in db_records:
-                    update_buffer.append(dict(db_record))
-                task_update_metrics.delay(update_buffer)
-            logger.info('added {} metrics records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
-            bibcodes = []
-            
-        if final_flag:
-            metrics_db.connection.close()
-            return
-
-
-
 if __name__ == '__main__':
     app.start()
 
