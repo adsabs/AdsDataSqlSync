@@ -4,8 +4,11 @@ from celery.utils.log import get_task_logger
 from celery import Task
 from celery.signals import worker_process_init
 from celery.signals import worker_process_shutdown
+from celery import bootsteps
+from celery.bin import Option
+
 from kombu import Exchange, Queue
-import argparse
+
 
         
 import sys
@@ -17,19 +20,20 @@ from row_view import SqlSync
 # This code is based on Celery usage in ADSimportpipeline/aip
 
 # run the workers with:
-# root@adsqb:/app# celery -A localToStaging.app worker -l info --concurrency=5
-# queue data from bibcode file with:
-# >>> import localToStaging.app
-# >>> localToStaging.app.queue_bibcodes('/tmp/testBibcodes1.txt')
+# root@adsqb:/app# celery -A nonbibUpdater.app worker -l info --concurrency=5
+# root@adsqb:/app# celery -A nonbibUpdater.app worker -l info --concurrency=5  --schema=staging --database=localhost
+# queue data from bibcode using queue_cli
 
 logger = get_task_logger('AdsDataSqlSync')
 conf = utils.load_config()
 
+global database_connection_string
+global schema_name
 
 # celery configuration mostly from ADSimportpipeline/aip/app.py
 app = Celery('AdsDataSqlSyncStaging',
              broker=conf.get('CELERY_BROKER', 'pyamqp://'),
-             include=['localToStaging.app'])
+             include=['nonbibUpdater.app'])
 
 
 exch = Exchange(conf.get('CELERY_DEFAULT_EXCHANGE', 'import-pipeline'), type=conf.get('CELERY_DEFAULT_EXCHANGE_TYPE', 'topic'))
@@ -39,6 +43,32 @@ app.conf.CELERY_QUEUES = (
     Queue('update-nonbib-staging', exch, routing_key='update-nonbib-staging')
 )
 
+
+
+# command line args based on http://docs.celeryproject.org/en/latest/userguide/extending.html#adding-new-command-line-options
+# tell workers where to write to
+def add_worker_arguments(parser):
+    logger.info('adding worker arguments')
+    parser.add_argument(
+        '--schema', action='store', default='staging',
+        help='schema identifier: staging')
+    parser.add_argument(
+        '--database', action='store', default='localhost',
+        help='database identifier: localhost',
+    ),
+app.user_options['worker'].add(add_worker_arguments)
+
+class MyBootstep(bootsteps.Step):
+    def __init__(self, worker, database='localhost', schema='staging', **options):
+        global database_connection_string
+        database_connection_string = conf['NONBIB_CONNECTIONS'][database]
+        global schema_name
+        schema_name = conf['NONBIB_SCHEMA_NAMES'][schema]
+        logger.info('in MyBootstep nonbib with database {} and schema {}, {} and {}'.format(
+            database_connection_string, schema_name, database, schema))
+        
+app.steps['worker'].add(MyBootstep)
+                                                                    
 app.conf.update(conf)
 
 
@@ -55,13 +85,13 @@ def task_foo(a, b):
 
                     
 @app.task(base=MyTask, queue='update-nonbib-staging')
-def task_update_nonbib_staging(nonbib_records):
+def task_update_nonbib(nonbib_records):
     """receives a set of full non_bib records, updates nonbib Postgres instance
     
     nonbib record includes primary key index field, staging value will not match other database
     """
     global nonbib_sink
-    logger.info('in task_update_nonbib_staging with {} records and db {}'.format(len(nonbib_records), nonbib_sink))
+    logger.info('in task_update_nonbib with {} records and db {}'.format(len(nonbib_records), nonbib_sink))
     database_buffer = []
     for current in nonbib_records:
         # logger.info('current queued record = {}'.format(current['bibcode']))
@@ -106,8 +136,10 @@ nonbib_sink = None
 @worker_process_init.connect
 def init_worker(**kwargs):
     global nonbib_sink
-    logger.info('in init_worker, creating database')
-    nonbib_sink = SqlSync('nonbibtest2', {'INGEST_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
+    global database_connection_string
+    global schema_name
+    logger.info('in init_worker nonbib, creating database')
+    nonbib_sink = SqlSync(schema_name, {'INGEST_DATABASE': database_connection_string})
 
 
 @worker_process_shutdown.connect
@@ -115,45 +147,9 @@ def shutdown_worker(**kwargs):
     global nonbib_sink
     if nonbib_sink:
         nonbib_sink.sql_sync_connection.close()
-        logger.info('in shutdown_worker, closed database connection')
+        logger.info('in nonbib shutdown_worker, closed database connection')
 
         
-def queue_bibcodes(bibcodes_filename):
-    """read list of changed bibcodes from file, get full records from database and queue them for delivery
-    full records come from the localhost Postgres database
-    """
-    print 'hey'
-    logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
-    nonbib_source =  SqlSync('nonbib', {'INGEST_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-    bibcodes = []
-    final_flag = False
-    f = open(bibcodes_filename)
-    if f is None:
-        logger.error('could not open {}'.format(bibcodes_filename))
-        return
-    while True:
-        line = f.readline()
-        if len(line) == 0:
-            final_flag = True
-        else:
-            bibcode = line.strip()
-            bibcodes.append(bibcode)
-
-        if len(bibcodes) >= 100 or final_flag:
-            logger.info('time to save data for {} bibcodes'.format(len(bibcodes)))
-            if len(bibcodes) > 0:
-                db_records = nonbib_source.get_by_bibcodes(bibcodes)
-                update_buffer = []
-                for db_record in db_records:
-                    update_buffer.append(dict(db_record))
-                task_update_nonbib_staging.delay(update_buffer)
-            logger.info('added {} records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
-            bibcodes = []
-            
-        if final_flag:
-            nonbib_source.sql_sync_connection.close()
-            return
-
 
 
 if __name__ == '__main__':
