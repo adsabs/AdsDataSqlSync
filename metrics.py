@@ -45,7 +45,7 @@ class Metrics():
         self.schema = metrics_schema
         self.table = self.get_metrics_table()
         self.database = self.config.get('METRICS_DATABASE', 'postgresql://postgres@localhost:5432/postgres')
-        self.engine = create_engine(self.database)
+        self.engine = create_engine(self.database, connect_args={'connect_timeout': 3})
         self.connection = self.engine.connect()
         # if true, don't bother checking if metrics database has bibcode, assume db insert
         self.from_scratch = self.config.get('FROM_SCRATCH', True)
@@ -96,7 +96,7 @@ class Metrics():
                      Column('an_refereed_citations', postgresql.REAL),
                      Column('modtime', DateTime),
                      schema=self.schema)
-    #extend_existing=True) 
+    #extend_existing=True)
 
     def create_metrics_table(self):
         self.engine.execute(CreateSchema(self.schema))
@@ -133,7 +133,7 @@ class Metrics():
         if bibcode is None:
             print 'error: cannont save metrics data that does not have a bibcode'
             return
-        
+
         if self.copy_from_program:
             print self.to_sql(values_dict)
             return
@@ -179,7 +179,7 @@ class Metrics():
 
         self.upserts = []
 
-        
+
     def read(self, bibcode):
         """read the passed bibcode from the postgres database"""
         s = select([self.table]).where(self.table.c.bibcode == bibcode)
@@ -268,7 +268,7 @@ class Metrics():
         while True:
             s = select([table])
             s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
-            connection = sql_sync.sql_sync_connection; 
+            connection = sql_sync.sql_sync_connection;
             results = connection.execute(s)
             for row_view_current in results:
                 metrics_dict = self.row_view_to_metrics(row_view_current, sql_sync)
@@ -294,7 +294,7 @@ class Metrics():
 
     # normalized citations:
     #  for a list of N papers (the citations?)
-    #  a = number of authors for the publication 
+    #  a = number of authors for the publication
     #  c = number of citations tha paper received (why not call it references?)
     #  c/a = normalized citations
     #  sum over N papers
@@ -308,14 +308,14 @@ class Metrics():
         metrics_dict['citations'] = passed_row_view['citations']
         metrics_dict['reads'] = passed_row_view['reads']
         metrics_dict['downloads'] = passed_row_view['downloads']
-        
+
         metrics_dict['citation_num'] = len(passed_row_view['citations']) if passed_row_view['citations'] else 0
         metrics_dict['author_num'] = max(len(passed_row_view['authors']),1) if passed_row_view['authors'] else 1
         metrics_dict['reference_num'] = len(passed_row_view['reference']) if passed_row_view['reference'] else 0
 
         #metrics_dict['citation_num'] = len(passed_row_view.get('citations', [])
         #metrics_dict['author_num'] = max(len(passed_row_view.get('authors'),[]),1)
-        #metrics_dict['reference_num'] = len(passed_row_view.get('reference'),[]) 
+        #metrics_dict['reference_num'] = len(passed_row_view.get('reference'),[])
 
         # next deal with papers that cite the current one
         # compute histogram, normalized values of citations
@@ -353,12 +353,12 @@ class Metrics():
 
         # annual citations
         today = datetime.today()
-        resource_age = max(1.0, today.year - int(bibcode[:4]) + 1) 
+        resource_age = max(1.0, today.year - int(bibcode[:4]) + 1)
         metrics_dict['an_citations'] = float(metrics_dict['citation_num']) / float(resource_age)
         metrics_dict['an_refereed_citations'] = float(metrics_dict['refereed_citation_num']) / float(resource_age)
 
         # normalized info
-        metrics_dict['rn_citations'] = normalized_reference     # total_normalized_citations  
+        metrics_dict['rn_citations'] = normalized_reference     # total_normalized_citations
         metrics_dict['rn_citation_data'] = citations_json_records
         metrics_dict['rn_citations_hist'] = dict(citations_histogram)
         metrics_dict['modtime'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -375,13 +375,13 @@ class Metrics():
         mismatches = []
         fields = ('refereed', 'rn_citations', 'rn_citation_data', 'downloads',
                   'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
-                  'reference_num', 'citations', 'refereed_citations', 'author_num', 
+                  'reference_num', 'citations', 'refereed_citations', 'author_num',
                   'an_refereed_citations', 'rn_citations_hist')
         for field in fields:
-            if Metrics.field_mismatch(field, m1, m2): 
+            if Metrics.field_mismatch(field, m1, m2):
                 print 'mismatch', bibcode, field  # , m1[field], m2[field]
                 mismatches.append(field)
-        
+
         if len(mismatches) > 0:
             return mismatches
         return False;
@@ -392,7 +392,7 @@ class Metrics():
         # metrics database has sql null for some reads and downloads while new metrics has array of 0 values
         if m2[fieldname] == None and (m1[fieldname] == [] or m1[fieldname] == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]):
             return False
-        
+
         if type(m1[fieldname]) != type(m2[fieldname]):
             return True
 
@@ -421,7 +421,7 @@ class Metrics():
             delta = abs(len(m1[fieldname]) - len(m2[fieldname]))
             if delta > 0 and delta < 3:
                 print 'warning: list length', len(m1[fieldname]), len(m2[fieldname])
-            elif delta >= 3: 
+            elif delta >= 3:
                 return True
 
             warning_count = 0
@@ -481,18 +481,18 @@ class Metrics():
             delta = abs(v1 - v2)
             limit = 5  # max(abs(v1), abs(v2)) * .15
             if (delta > limit):
-                print 'mismatch', v1, v2 
+                print 'mismatch', v1, v2
                 return True
             else:
                 return False
         if isinstance(v1, dict):
             k1 = v1.keys()
             k2 = v2.keys()
-            if len(k1) != len(k2): 
-                print 'mismatch', v1, v2 
+            if len(k1) != len(k2):
+                print 'mismatch', v1, v2
                 return True
             for k in k1:
-                if v1[k] != v2[k]: 
+                if v1[k] != v2[k]:
                     print 'mismatch', k, v1, v2
                     return True
             return False
@@ -517,10 +517,10 @@ class Metrics():
                         'an_refereed_citations', 'modtime')
         if local is None:
             return
-        
+
         for field in local_fields:
             save_dict[field] = local[field]
-            
+
         if rds:
             # here if there's an existing record in the rds database we want to update it
             # we want to preserve the id field and update the others
@@ -536,7 +536,7 @@ class Metrics():
             metrics_rds.connection.execute(metrics_rds.table.insert(), [save_dict])
         end = datetime.now()
 
-        
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='process row view to Metrics')
     parser.add_argument('-deltaSchema', default=None, help='schema for delta table')
@@ -550,7 +550,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--file', help='file of bibcodes, one per line')
     parser.add_argument('-startOffset', default=1, help='offset into list of bibcodes to process for chunking support')
     parser.add_argument('-endOffset', default=-1, help='when to stop processing list of bibcodes for chunking support')
-    
+
     args = parser.parse_args()
     m = Metrics(args.metricsSchema, {'FROM_SCRATCH': False})
     sql_sync = row_view.SqlSync(args.rowViewSchema)
@@ -572,7 +572,7 @@ if __name__ == "__main__":
                 if count % 100 == 0:
                     print 'flushing records'
                     m.flush()
-                
+
     elif args.command == 'metricsCompute' and args.deltaSchema:
         print 'saving delta'
         m = Metrics(args.metricsSchema, from_scratch = args.fromScratch, copy_from_program = args.copyFromProgram)
@@ -626,7 +626,7 @@ if __name__ == "__main__":
                     metrics2.connection.execute(metrics2.u, update_buffer)
                     update_buffer = []
                     print i, datetime.now()
-                    
+
         else:
             Metrics.metrics_update(args.bibcode, metrics1, metrics2)
 
