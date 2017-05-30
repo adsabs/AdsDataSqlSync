@@ -35,7 +35,7 @@ app = Celery('AdsDataSqlSync',
              broker=conf.get('CELERY_BROKER', 'pyamqp://'),
              include=['metricsUpdater.app'])
 
-exch = Exchange(conf.get('CELERY_DEFAULT_EXCHANGE', 'update-metrics'), type=conf.get('CELERY_DEFAULT_EXCHANGE_TYPE', 'topic'))
+exch = Exchange(conf.get('CELERY_UPDATEMETRICS_EXCHANGE', 'update-metrics'), type=conf.get('CELERY_UPDATEMETRICS_EXCHANGE_TYPE', 'topic'))
 
 app.conf.CELERY_QUEUES = (
     Queue('errors', exch, routing_key='errors', durable=False, message_ttl=24*3600*5),

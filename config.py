@@ -9,8 +9,6 @@ DATA_PATH = '/inputDataDir/current/'
 INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database used during ingest, not by celery code
 METRICS_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
-#METRICS_DATABASE2 = 'postgresql://metrics:metrics@testing.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
-#METRICS_DATABASE2 = 'postgresql://metrics:metrics@adsabs-psql.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
 
 # filenames for column files
 DOWNLOAD = 'reads/downloads.links'
@@ -32,13 +30,13 @@ CANONICAL = 'bibcodes.list.can'
 MAX_ROWS = -1
 
 #RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-RABBITMQ_URL = 'amqp://admin:password@adswhy:5682/etl'
+RABBITMQ_URL = 'amqp://:@adswhy:5682/etl'
 RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
 RABBITMQ_ROUTE = 'SolrUpdateQueue'
 
 # based on ADSimmportpipleine.config.py
 #CELERY_BROKER = 'pyamqp://guest@localhost:6672/new_host'
-CELERY_BROKER = 'pyamqp://admin:password@adswhy:5682/metrics'
+CELERY_BROKER = 'pyamqp://:@localhost:5682/metrics'
 
 # ================= celery/rabbitmq rules============== #
 # ##################################################### #
@@ -46,11 +44,11 @@ CELERY_BROKER = 'pyamqp://admin:password@adswhy:5682/metrics'
 ACKS_LATE=True
 PREFETCH_MULTIPLIER=1
 CELERYD_TASK_SOFT_TIME_LIMIT = 60
-xCELERY_BROKER_URL='redis://localhost:6379/0'
-xCELERY_RESULT_BACKEND='redis://localhost:6379/0'
 
 CELERY_DEFAULT_EXCHANGE = 'import-pipeline'
 CELERY_DEFAULT_EXCHANGE_TYPE = "topic"
+CELERY_UPDATEMETRICS_EXCHANGE = 'update-metrics'
+CELERY_UPDATEMETRICS_EXCHANGE_TYPE = "topic"
 
 # database connection and schema info for celery
 # celery based code can read and write with any metrics store
@@ -62,7 +60,7 @@ METRICS_SCHEMA_NAMES['staging'] = 'metricsstaging'
 
 METRICS_CONNECTIONS = {}
 METRICS_CONNECTIONS['localhost'] = 'postgresql://postgres@localhost:5432/postgres'
-METRICS_CONNECTIONS['test'] = 'postgresql://metrics:metrics@testing.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
-METRICS_CONNECTIONS['prod'] = 'postgresql://metrics:metrics@adsabs-psql.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
+METRICS_CONNECTIONS['test'] = 'postgresql://:@test-amazon:5432/metrics'
+METRICS_CONNECTIONS['prod'] = 'postgresql://:@prod-amazon:5432/metrics'
 
 
