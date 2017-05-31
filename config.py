@@ -9,6 +9,8 @@ DATA_PATH = '/inputDataDir/current/'
 INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database used during ingest, not by celery code
 METRICS_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
+#METRICS_DATABASE2 = 'postgresql://metrics:metrics@testing.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
+#METRICS_DATABASE2 = 'postgresql://metrics:metrics@adsabs-psql.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'
 
 # filenames for column files
 DOWNLOAD = 'reads/downloads.links'
@@ -29,14 +31,12 @@ CANONICAL = 'bibcodes.list.can'
 # -1 means process all rows
 MAX_ROWS = -1
 
-#RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-RABBITMQ_URL = 'amqp://:@adswhy:5682/etl'
+RABBITMQ_URL = 'amqp://user:pass@host:5682/etl'
 RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
 RABBITMQ_ROUTE = 'SolrUpdateQueue'
 
 # based on ADSimmportpipleine.config.py
-#CELERY_BROKER = 'pyamqp://guest@localhost:6672/new_host'
-CELERY_BROKER = 'pyamqp://:@localhost:5682/metrics'
+CELERY_BROKER = 'pyamqp://user:pass@host:5682/metrics'
 
 # ================= celery/rabbitmq rules============== #
 # ##################################################### #
@@ -47,20 +47,17 @@ CELERYD_TASK_SOFT_TIME_LIMIT = 60
 
 CELERY_DEFAULT_EXCHANGE = 'import-pipeline'
 CELERY_DEFAULT_EXCHANGE_TYPE = "topic"
-CELERY_UPDATEMETRICS_EXCHANGE = 'update-metrics'
-CELERY_UPDATEMETRICS_EXCHANGE_TYPE = "topic"
 
 # database connection and schema info for celery
 # celery based code can read and write with any metrics store
 # useful for moving data from tmp to staging or staging to test or prod
-METRICS_SCHEMA_NAMES = {}
-METRICS_SCHEMA_NAMES['tmp'] = 'metrics'
-METRICS_SCHEMA_NAMES['rds'] = ''
-METRICS_SCHEMA_NAMES['staging'] = 'metricsstaging'
 
 METRICS_CONNECTIONS = {}
-METRICS_CONNECTIONS['localhost'] = 'postgresql://postgres@localhost:5432/postgres'
-METRICS_CONNECTIONS['test'] = 'postgresql://:@test-amazon:5432/metrics'
-METRICS_CONNECTIONS['prod'] = 'postgresql://:@prod-amazon:5432/metrics'
+METRICS_CONNECTIONS['localhost'] = 'postgresql://user:pass@host:5432/postgres'
+METRICS_CONNECTIONS['test'] = 'postgresql://user:pass@host:5432/metrics'
+METRICS_CONNECTIONS['prod'] = 'postgresql://user:pass@host:5432/metrics'
 
-
+UPDATE_METRICS_VHOST = {}
+UPDATE_METRICS_VHOST['metrics'] = {'schema': 'metricsstaging', 'db': METRICS_CONNECTIONS['localhost']}
+UPDATE_METRICS_VHOST['metrics-test'] = {'schema': '', 'db': METRICS_CONNECTIONS['test']}
+UPDATE_METRICS_VHOST['metrics-prod'] = {'schema': '', 'db': METRICS_CONNECTIONS['prod']}

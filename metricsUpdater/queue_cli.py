@@ -13,6 +13,7 @@ sys.path.append("..")
 import utils
 from metrics import Metrics
 from metricsUpdater.app import task_update_metrics
+from metricsUpdater.app import app
 
 # Code for updating the metrics rds-based Postgres instance
 # it provides a cli to queue bibcodes
@@ -20,48 +21,44 @@ from metricsUpdater.app import task_update_metrics
 
 
 # queue data from bibcode file with:
-# $root@adsqb:/app/metricsUpdater# python queue_cli.py -b /tmp/bibcodes.test --from-database localhost --from-schema tmp --to-database localhost --to-schema staging
+# $root@adsqb:/app/metricsUpdater# python queue_cli.py /tmp/bibcodes.test localhost metrics --to-vhost metrics
 
 
 logger = get_task_logger('AdsDataSqlSync')
 conf = utils.load_config()
 
 def main():
-    parser = argparse.ArgumentParser(description='read metrics records and queue for writing by workers')
-    parser.add_argument('-b', '--bibcodes', default='foo', help='file with bibcodes')
-    parser.add_argument('-d', '--from-database', default='localhost', help='localhost | test | prod')
-    parser.add_argument('-s', '--from-schema', default='tmp', help='tmp | staging | rds')
-    parser.add_argument('-t', '--to-database', default='localhost', help='localhost | test | prod')
-    parser.add_argument('-z', '--to-schema', default='tmp', help='tmp | staging | rds')
+    parser = argparse.ArgumentParser(description='Read metrics records and queue for writing by workers')
+    parser.add_argument('bibcodes_filename', type=str, help='Filen with bibcodes')
+    parser.add_argument('from_database', type=str, help='Database: localhost | test | prod')
+    parser.add_argument('from_schema', type=str, help='Schema (e.g., metrics, metricstaging or "")')
+    parser.add_argument('--to-vhost', default='metrics', help='Send updates to RabbitMQ vhost: metrics | metrics-test | metrics-prod')
     args = parser.parse_args()
 
-    for database in (args.from_database, args.to_database):
-        if database not in conf['METRICS_CONNECTIONS'].keys():
-            raise Exception("Unknown database '{}'".format(database))
+    if args.from_database not in conf['METRICS_CONNECTIONS'].keys():
+        raise Exception("Unknown database '{}'".format(args.from_database))
 
-    for schema in (args.from_schema, args.to_schema):
-        if schema not in conf['METRICS_SCHEMA_NAMES'].keys():
-            raise Exception("Unknown schema '{}'".format(schema))
-
-    filename = args.bibcodes
-    from_database = conf['METRICS_CONNECTIONS'][args.from_database]
-    from_schema = conf['METRICS_SCHEMA_NAMES'][args.from_schema]
-    to_database = args.to_database
-    to_schema = args.to_schema
-    print 'file {}, from database {}, from schema {}, to database {}, to schema {}'.format(filename, from_database, from_schema, to_database, to_schema)
-    queue_metrics(filename, from_database, from_schema, to_database, to_schema)
+    filename = args.bibcodes_filename
+    from_database_connection_string = conf['METRICS_CONNECTIONS'][args.from_database]
+    from_schema = args.from_schema
+    to_vhost = args.to_vhost
+    print 'file {}, from database {}, from schema {}, to vhost {}'.format(filename, from_database_connection_string, from_schema, to_vhost)
+    queue_metrics(filename, from_database_connection_string, from_schema, to_vhost)
 
 
 
-def queue_metrics(bibcodes_filename, connection_string, from_schema, to_database, to_schema):
+def queue_metrics(bibcodes_filename, connection_string, from_schema, to_vhost):
     """
     Read list of changed bibcodes from file, get full records from database and queue them for delivery
-    using the a routing key that specifies the destination database/schema.
+    using the a RabbitMQ vhost (the workers listening will save to the correct destination database/schema).
 
     Full records come from the localhost Postgres database.
     """
+    app.conf.BROKER_URL = "/".join(app.conf.BROKER_URL.split("/")[:-1] + [to_vhost,])
+    logger.info("RabbitMQ vhost set to '{}'".format(to_vhost))
+
     logger.info('queuing bibcodes from file {}'.format(bibcodes_filename))
-    routing_key = "update-metrics.{}.{}".format(to_database, to_schema)
+    routing_key = "update-metrics"
     metrics_db =  Metrics(from_schema, {'METRICS_DATABASE': connection_string})
     bibcodes = []
     final_flag = False

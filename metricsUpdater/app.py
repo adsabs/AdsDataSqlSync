@@ -20,29 +20,51 @@ from metrics import Metrics
 # Code for updating the metrics rds-based Postgres instance
 # This code is based on Celery usage in ADSimportpipeline/aip
 
-# run the workers with:
-# root@adsqb:/app# celery -A metricsUpdater.app worker -l info --concurrency=5
+# 1) Prepare rabbitmq:
+#   docker exec -it backoffice_rabbitmq rabbitmqctl add_user admin password
+#   docker exec -it backoffice_rabbitmq rabbitmqctl add_vhost metrics
+#   docker exec -it backoffice_rabbitmq rabbitmqctl set_user_tags admin administrator
+#   # Permissions to: Configure / Write / Read
+#   docker exec -it backoffice_rabbitmq rabbitmqctl set_permissions -p metrics admin ".*" ".*" ".*"
+#
+# 2) run the workers with:
+#   root@adsqb:/app# celery -A metricsUpdater.app worker -l info --concurrency=5 --vhost metrics
+#
 # queue data from bibcode using queue_cli
 
 logger = get_task_logger('AdsDataSqlSync')
 conf = utils.load_config()
 
-global metrics_rds_collection
-global conf
+global metrics_rds
 
 # celery configuration mostly from ADSimportpipeline/aip/app.py
 app = Celery('AdsDataSqlSync',
              broker=conf.get('CELERY_BROKER', 'pyamqp://'),
              include=['metricsUpdater.app'])
 
-exch = Exchange(conf.get('CELERY_UPDATEMETRICS_EXCHANGE', 'update-metrics'), type=conf.get('CELERY_UPDATEMETRICS_EXCHANGE_TYPE', 'topic'))
+exch = Exchange(conf.get('CELERY_DEFAULT_EXCHANGE', 'update-metrics'), type=conf.get('CELERY_DEFAULT_EXCHANGE_TYPE', 'topic'))
 
 app.conf.CELERY_QUEUES = (
     Queue('errors', exch, routing_key='errors', durable=False, message_ttl=24*3600*5),
-    Queue('update-localhost-metrics', exch, routing_key='update-metrics.localhost.#'),
-    Queue('update-test-metrics', exch, routing_key='update-metrics.test.#'),
-    Queue('update-prod-metrics', exch, routing_key='update-metrics.prod.#'),
+    Queue('update-metrics', exch, routing_key='update-metrics'),
 )
+
+app.user_options['worker'].add(
+    Option('--vhost', dest='vhost', default=None, type=str, nargs=1, help='RabbitMQ virtual host')
+)
+
+class CustomArgs(bootsteps.Step):
+    def __init__(self, worker, vhost, **options):
+        if vhost is not None and len(vhost) == 1:
+            vhost = vhost[0]
+        else:
+            vhost = "metrics"
+
+        app.conf.VHOST = vhost
+        app.conf.BROKER_URL = "/".join(app.conf.BROKER_URL.split("/")[:-1] + [vhost,])
+        logger.info("RabbitMQ vhost set to '{}'".format(vhost))
+
+app.steps['worker'].add(CustomArgs)
 
 app.conf.update(conf)
 
@@ -54,44 +76,16 @@ class MyTask(Task):
 
 
 
-@app.task(base=MyTask, bind=True, exchange="update-metrics")
+@app.task(base=MyTask, bind=True, queue="update-metrics")
 def task_update_metrics(self, metrics_records):
-    """
-    Depending on the routing key, the update metrics task will be executed using
-    a specific destination database/schema
-    """
-    v_routing_key = self.request.delivery_info['routing_key'].split(".")
-
-    if len(v_routing_key) != 3:
-        logger.error("Wrong routing key: " + self.request.delivery_info['routing_key'])
-        raise Ignore()
-
-    action, database, schema = v_routing_key
-
-    if database not in ("localhost", "prod", "test"):
-        logger.error("Unknown database: " + database)
-        raise Ignore()
-
-    if schema not in ("tmp", "staging", "rds"):
-        logger.error("Unknown schema: " + schema)
-        raise Ignore()
-
-    _task_update_metrics(metrics_records, database, schema)
-
-
-def _task_update_metrics(metrics_records, database, schema):
     """
     Receives a set of full metrics records and updates rds based metrics Postgres instance
 
     Metrics record includes primary key index field, staging value will not match rds database
     """
-    global metrics_rds_collection
-    global conf
-    try:
-        metrics_rds = metrics_rds_collection[database][schema]
-    except KeyError:
-        logger.error("Data cannot be written to database '{}' schema '{}' because a connection was not established during worker initialization".format(database, schema))
-        raise Ignore()
+    #v_routing_key = self.request.delivery_info['routing_key']
+
+    global metrics_rds
 
     logger.info('in task_update_metrics with {} records'.format(len(metrics_records)))
     database_buffer = []
@@ -135,31 +129,19 @@ def _task_update_metrics(metrics_records, database, schema):
 @worker_process_init.connect
 def init_worker(**kwargs):
     """
-    Open database connections to all the possible databases defined in the
-    configuration file.
-
-    There will be just one connection per database+schema per worker, which is
-    accessed using a global variable.
+    Open a database connection to the one that matches the RabbitMQ vhost we
+    are using.
 
     Source: http://stackoverflow.com/questions/14526249/celery-worker-database-connection-pooling
     """
-    # TODO: Adapt Metrics to support multiple schemas with one database connection
-    global metrics_rds_collection
-    global conf
+    global metrics_rds
 
-    metrics_rds_collection = {}
-    for database in conf['METRICS_CONNECTIONS'].keys():
-        database_connection_string = conf['METRICS_CONNECTIONS'][database]
-        metrics_rds_collection[database] = {}
-        for schema in conf['METRICS_SCHEMA_NAMES'].keys():
-            schema_name = conf['METRICS_SCHEMA_NAMES'][schema]
-            try:
-                metrics_rds_collection[database][schema] = Metrics(schema_name, {'METRICS_DATABASE': database_connection_string})
-            except sqlalchemy.exc.OperationalError:
-                logger.warn("Connection to database '{}' schema '{}' failed, this worker will not be able to modify this database".format(database, schema))
-                break # Do not continue with other schemas in this database
-            else:
-                logger.info("Connection to database '{}' schema '{}' succeeded".format(database, schema))
+    vhost = app.conf.VHOST
+    database_connection_string = app.conf.UPDATE_METRICS_VHOST[vhost]['db']
+    schema_name = app.conf.UPDATE_METRICS_VHOST[vhost]['schema']
+    logger.info("Openning connection to database..." + database_connection_string)
+    metrics_rds = Metrics(schema_name, {'METRICS_DATABASE': database_connection_string})
+
 
 
 @worker_process_shutdown.connect
@@ -167,11 +149,9 @@ def shutdown_worker(**kwargs):
     """
     Close all open database connections when the worker ends.
     """
-    global metrics_rds_collection
-    for database in metrics_rds_collection.keys():
-        for schema in metrics_rds_collection[database]:
-            logger.warn("Closing connection to database '{}' schema '{}'...".format(database, schema))
-            metrics_rds_collection[database][schema].connection.close()
+    global metrics_rds
+    logger.info("Closing connection to database...")
+    metrics_rds.connection.close()
 
 
 if __name__ == '__main__':
