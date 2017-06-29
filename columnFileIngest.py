@@ -178,7 +178,7 @@ class ColumnFileIngester:
         uses line combining ReadColumnFile"""
         sql_sync = SqlSync(schema_name)
         Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
+        sess = Session(bind=sql_sync.connection)
         sql_table = sql_sync.get_table(passed_type)
         sql_count = sess.query(sql_table).count()
         filename = self.config['DATA_PATH'] + self.config[passed_type.upper()]

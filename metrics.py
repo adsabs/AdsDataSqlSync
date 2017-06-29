@@ -1,25 +1,23 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean
+from sqlalchemy import Table, bindparam, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from sqlalchemy import *
 from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import sessionmaker
 from collections import defaultdict
 from datetime import datetime
 import time
 import sys
 import json
 import argparse
-import logging
 
+from adsputils import load_config, setup_logging
 import row_view
-import utils
+
 
 
 #from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
@@ -32,19 +30,19 @@ meta = MetaData()
 # part of the Metrics system
 
 class Metrics():
+    """computes and provides interface for metrics data"""
 
     def __init__(self, metrics_schema='metrics', passed_config=None):
-        #metrics_database='postgresql://postgres@localhost:5432/postgres'
-        #         from_scratch=False, copy_from_program=False):
-        self.config = {}
-        self.config.update(utils.load_config())
+        self.config = load_config()
         if passed_config:
             self.config.update(passed_config)
+        self.logger = setup_logging('AdsDataSqlSync', level=self.config.get('LOG_LEVEL', 'INFO'))
+
 
         self.meta = MetaData()
         self.schema = metrics_schema
         self.table = self.get_metrics_table()
-        self.database = self.config.get('METRICS_DATABASE', 'postgresql://postgres@localhost:5432/postgres')
+        self.database = self.config.get('METRICS_DATABASE', 'postgresql://postgres:postgres@localhost:5432/postgres')
         self.engine = create_engine(self.database, connect_args={'connect_timeout': 3})
         self.connection = self.engine.connect()
         # if true, don't bother checking if metrics database has bibcode, assume db insert
@@ -54,7 +52,7 @@ class Metrics():
         self.upserts = []
 
         # sql command to update a row in the metrics table
-        self.u = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
+        self.updater_sql = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
             values ({'refereed': bindparam('refereed'),
                      'rn_citations': bindparam('rn_citations'),
                      'rn_citation_data': bindparam('rn_citation_data'),
@@ -72,7 +70,6 @@ class Metrics():
 
         self.tmp_count = 0
         self.tmp_update_buffer = []
-        self.logger = logging.getLogger('AdsDataSqlSync')
 
     def get_metrics_table(self, meta=None):
         if meta is None:
@@ -96,7 +93,6 @@ class Metrics():
                      Column('an_refereed_citations', postgresql.REAL),
                      Column('modtime', DateTime),
                      schema=self.schema)
-    #extend_existing=True)
 
     def create_metrics_table(self):
         self.engine.execute(CreateSchema(self.schema))
@@ -115,15 +111,6 @@ class Metrics():
         self.logger.info('metrics.py, metrics table dropped')
 
 
-
-    def test_query(self, bibcode):
-        q ='select refereed,array_length(reference,1),bibcode from ingest.RowViewM where bibcode = ANY ((select citations from ingest.RowViewM where bibcode=\'' + bibcode + '\')::text[]);'
-        result = sql_sync_engine.execute(q)
-        for row in result:
-            refereed_flag = row[0]
-            len_reference = row[1]
-            citation_bibcode = row[2]
-            print refereed_flag, len_reference, citation_bibcode, '!!'
 
 
     def save(self, values_dict):
@@ -173,7 +160,7 @@ class Metrics():
                     inserts.append(d)
 
         if len(updates):
-            result = self.connection.execute(self.u, updates)
+            result = self.connection.execute(self.updater_sql, updates)
         if len(inserts):
             result = self.connection.execute(self.table.insert(), inserts)
 
@@ -203,7 +190,7 @@ class Metrics():
         delta_table = delta_sync.get_delta_table()
         sql_sync = row_view.SqlSync(row_view_schema)
         row_view_table = sql_sync.get_row_view_table()
-        connection = sql_sync.sql_sync_engine.connect()
+        connection = sql_sync.engine.connect()
         s = select([delta_table])
         results = connection.execute(s)
         count = 0
@@ -267,8 +254,8 @@ class Metrics():
         table = sql_sync.get_row_view_table()
         while True:
             s = select([table])
-            s = s.where(sql_sync.row_view_table.c.id >= offset).where(sql_sync.row_view_table.c.id < offset + step_size)
-            connection = sql_sync.sql_sync_connection;
+            s = s.where(sql_sync.table.c.id >= offset).where(sql_sync.table.c.id < offset + step_size)
+            connection = sql_sync.connection;
             results = connection.execute(s)
             for row_view_current in results:
                 metrics_dict = self.row_view_to_metrics(row_view_current, sql_sync)
@@ -327,8 +314,8 @@ class Metrics():
         citations_histogram = defaultdict(float)
         total_normalized_citations = 0.0
         if citations:
-            q = 'select refereed,array_length(reference,1),bibcode from ' + sql_sync.schema_name + '.RowViewM where bibcode in (select unnest(citations) from ' + sql_sync.schema_name + '.RowViewM where bibcode=%s);'
-            result = sql_sync.sql_sync_connection.execute(q,bibcode)
+            q = 'select refereed,array_length(reference,1),bibcode from ' + sql_sync.schema + '.RowViewM where bibcode in (select unnest(citations) from ' + sql_sync.schema + '.RowViewM where bibcode=%s);'
+            result = sql_sync.connection.execute(q,bibcode)
             for row in result:
                 citation_refereed = row[0] if row[0] else False
                 citation_refereed = citation_refereed in (True, 't', 'true')
@@ -526,7 +513,7 @@ class Metrics():
             # we want to preserve the id field and update the others
             save_dict['id'] = rds['id']
             save_dict['tmp_bibcode'] = bibcode
-            # metrics_rds.connection.execute(metrics_rds.u, [save_dict])
+            # metrics_rds.connection.execute(metrics_rds.updater_sql, [save_dict])
             update_buffer.append(save_dict)
         else:
             # here with a bibcode not in rds
@@ -615,7 +602,7 @@ if __name__ == "__main__":
                     print 'final saving {} records'.format(len(update_buffer))
                     print datetime.now()
                     if len(update_buffer) > 0:
-                        metrics2.connection.execute(metrics2.u, update_buffer)
+                        metrics2.connection.execute(metrics2.updater_sql, update_buffer)
                     print i, datetime.now()
                     exit()
                     #metrics1.connection.close()
@@ -623,7 +610,7 @@ if __name__ == "__main__":
                 Metrics.metrics_update(line.strip(), metrics1, metrics2, update_buffer)
                 i += 1
                 if len(update_buffer) >= 100:
-                    metrics2.connection.execute(metrics2.u, update_buffer)
+                    metrics2.connection.execute(metrics2.updater_sql, update_buffer)
                     update_buffer = []
                     print i, datetime.now()
 

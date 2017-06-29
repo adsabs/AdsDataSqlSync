@@ -21,12 +21,12 @@ def load_column_files(sql_sync):
     note that the copy from program command actually runs this python code with different arguments
     """
     Session = sessionmaker()
-    sess = Session(bind=sql_sync.sql_sync_connection)
+    sess = Session(bind=sql_sync.connection)
     for t in row_view.SqlSync.all_types:
         command_args = ' --fileType ' + t +   \
-                       ' --rowViewSchemaName ' + sql_sync.schema_name + ' ingest'
+                       ' --rowViewSchemaName ' + sql_sync.schema + ' ingest'
         python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-        sql_command = 'copy ' + sql_sync.schema_name + '.' + t +  \
+        sql_command = 'copy ' + sql_sync.schema + '.' + t +  \
                       ' from program ' + python_command + ';'
 
         sess.execute(sql_command)
@@ -108,7 +108,7 @@ def main():
         # that sql command will invoke ingest of each table
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
+        sess = Session(bind=sql_sync.connection)
         for t in row_view.SqlSync.all_types:
             command_args = ' ingest --fileType ' + t +   \
                 ' --rowViewSchemaName ' + args.rowViewSchemaName

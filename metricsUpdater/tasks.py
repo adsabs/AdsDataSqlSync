@@ -8,8 +8,8 @@ from kombu import Queue
 from celery.signals import worker_process_init, worker_process_shutdown, user_preload_options
 
 from metricsUpdater import app as app_module
-
 from metrics import Metrics
+from utils import process_rows
 
 app = app_module.MetricsUpdaterCelery('metrics-updater')
 logger = app.logger
@@ -23,36 +23,13 @@ app.conf.CELERY_QUEUES = (
 
 @app.task(queue="update-metrics")
 def task_update_metrics(metrics_records):
-    """Receives a set of full metrics records and updates metrics Postgres table                  
-    Metrics record may include primary key index field which should not be saved to database
+    """Receives a set of full metrics records and updates metrics Postgres table
+                      
     """
-    #v_routing_key = self.request.delivery_info['routing_key']                                                                                
-
     global metrics_rds
-
     logger.info('in task_update_metrics with {} records'.format(len(metrics_records)))
-    db_schema = app.conf['METRICS_WRITE_SCHEMA']
-    database_buffer = []
-    for current in metrics_records:
-        bibcode = current['bibcode']
-
-        # read existing record from rds                                                                                                       
-        r = metrics_rds.read(bibcode)
-        if r:
-            # here if there is an existing record in the rds database, we need to do sql update                                               
-            current['id'] = r['id']
-            current['tmp_bibcode'] = bibcode
-            database_buffer.append(current)
-        else:
-            # here if this is a new record for rds                                                                                            
-            # we do not cache inserts, they are a small percentage of the traffic                                                             
-            logger.info('performing rds insert for {}'.format(bibcode))
-            metrics_rds.connection.execute(metrics_rds.table.insert(), [current])
-
-    # for improved, performance we perform a single sql update operation                                                                      
-    if len(database_buffer) > 0:
-        metrics_rds.connection.execute(metrics_rds.u, database_buffer)
-    logger.info('updated {} metrics records to schema {}'.format(len(database_buffer), db_schema))
+    process_rows(metrics_records, metrics_rds, logger)
+    
     
 @worker_process_init.connect
 def init_worker(**kwargs):

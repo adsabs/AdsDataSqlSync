@@ -8,8 +8,8 @@ from kombu import Queue
 from celery.signals import worker_process_init, worker_process_shutdown, user_preload_options
 
 from nonbibUpdater import app as app_module
-
 from row_view import SqlSync
+from utils import process_rows
 
 app = app_module.NonbibUpdaterCelery('nonbib-updater')
 logger = app.logger
@@ -30,25 +30,7 @@ def task_update_nonbib(nonbib_records):
     global db_connection
 
     logger.info('in task_update_nonbib with {} records'.format(len(nonbib_records)))
-    db_schema = app.conf['NONBIB_WRITE_SCHEMA']
-    database_buffer = []
-    for current in nonbib_records:
-        bibcode = current['bibcode']
-        r = db_connection.get_row_view(bibcode)
-        if r:
-            # here if there is an existing record in the database, we need to do sql update                                               
-            current['id'] = r['id']
-            current['tmp_bibcode'] = bibcode
-            database_buffer.append(current)
-        else:
-            # here if this is a new record for rds                                                                                            
-            # we do not cache inserts, they are a small percentage of the traffic                                                             
-            db_connection.sql_sync_connection.execute(db_connection.table.insert(), [current])
-            
-    # for improved, performance we perform a single sql update operation                                                                      
-    if len(database_buffer) > 0:
-        db_connection.sql_sync_connection.execute(db_connection.u, database_buffer)
-    logger.info('updated {} metrics records to schema {}'.format(len(database_buffer), db_schema))
+    process_rows(nonbib_records, db_connection, logger)
 
 
 @worker_process_init.connect
@@ -73,7 +55,7 @@ def shutdown_worker(**kwargs):
     global db_connection
     if db_connection:
         logger.info('Closing worker connection to database')
-        db_connection.sql_sync_connection.close()
+        db_connection.connection.close()
     
 
 

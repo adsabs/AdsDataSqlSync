@@ -5,6 +5,8 @@ import app as app_module
 sys.path.append("../")
 from metrics import Metrics
 import metricsUpdater.tasks
+from utils import queue_rows
+
    
 def main():
     parser = argparse.ArgumentParser(description='Read metrics records for and queue them for writing by workers')
@@ -27,37 +29,9 @@ def queue_metrics(bibcodes_filename):
     celery_connection = app_obj.conf['CELERY_BROKER']
     logger.info('read bibcodes from file {}, queue records from database {}, schema {}, on queue {}'
         .format(bibcodes_filename, re.sub('//.*@', '', db_connection), db_schema, re.sub('//.*@', '', celery_connection)))
-
     metrics_db =  Metrics(db_schema, {'METRICS_DATABASE': db_connection})
-    bibcodes = []
-    final_flag = False
-    f = open(bibcodes_filename)
-    if f is None:
-        logger.error('could not open {}'.format(bibcodes_filename))
-        return
-    while True:
-        line = f.readline()
-        if len(line) == 0:
-            final_flag = True
-        else:
-            bibcode = line.strip()
-            bibcodes.append(bibcode)
-
-        if len(bibcodes) >= 100 or final_flag:
-            logger.info('time to queue metrics data for {} bibcodes'.format(len(bibcodes)))
-            if len(bibcodes) > 0:
-                db_records = metrics_db.get_by_bibcodes(bibcodes)
-                update_buffer = []
-                for db_record in db_records:
-                    update_buffer.append(app_module.MetricsUpdaterCelery.cleanup(db_record))
-                metricsUpdater.tasks.task_update_metrics.delay(update_buffer)
-            logger.info('added {} metrics records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
-            bibcodes = []
-
-        if final_flag:
-            metrics_db.connection.close()
-            return
-
+    queue_rows(bibcodes_filename, metrics_db, metricsUpdater.tasks.task_update_metrics, logger)
+    metrics_db.connection.close()
 
     
 if __name__ == "__main__":
