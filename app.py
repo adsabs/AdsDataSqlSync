@@ -2,15 +2,14 @@
 import sys
 import re
 import argparse
-import utils
 import os
 from sqlalchemy.orm import sessionmaker
-
 
 import columnFileIngest
 import row_view
 import metrics
-import queue
+from adsputils import load_config, setup_logging
+
 logger = None
 config = {}
 
@@ -66,14 +65,14 @@ def main():
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
-                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
+                        + ' | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
 
-    config.update(utils.load_config())
+    config.update(load_config())
 
     global logger
-    logger = utils.setup_logging('AdsDataSqlSync', 'AdsDataSqlSync', config['LOGGING_LEVEL'])
+    logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
     logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
 
     ingester = columnFileIngest.ColumnFileIngester(config)
@@ -161,21 +160,9 @@ def main():
     elif args.command == 'createNewBibcodes' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.build_new_bibcodes(args.rowViewBaselineSchemaName)
-    elif args.command == 'queueAllBibcodes' and args.rowViewSchemaName:
-        q = queue.Queue(args.rowViewSchemaName, config)
-        q.add_all_bibcodes()
-    elif args.command == 'queueChangedBibcodes' and args.rowViewSchemaName:
-        q = queue.Queue(args.rowViewSchemaName, config)
-        q.add_changed_bibcodes()
     elif args.command == 'logDeltaReasons' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
-    elif args.command == 'initQueue':
-        q = queue.Queue(None, config)
-        q.init_rabbitmq()
-    elif args.command == 'testQueue':
-        q = queue.Queue(None, config)
-        q.publish_to_rabbitmq(['1513hist.book.....H', '1057wjlf.book.....C'])
     elif args.command == 'runRowViewPipeline' and args.rowViewSchemaName:
         # drop tables, create tables, load data, compute metrics
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)

@@ -1,6 +1,34 @@
 """mostly code used by updater to update a sql table"""
 
 
+def queue_changed_rows(delta_table, db_table, task, logger):
+    """save queue changed metrics 
+
+    delta_table: database table holding chagned and new bibcoces
+    db_table: typically an instance of Metrics
+    task: worker function that reads from queue"""
+    bibcodes = []
+    s = select(delta_table)
+    deltas = delta_table.conn.execute(s)
+    for current in delta:
+        bibcodes.append(current)
+        if len(bibcodes) > 100:
+            db_records = db_table.get_by_bibcodes(bibcodes)
+            update_buffer = []
+            for db_record in db_records:
+                update_buffer.append(create_clean(db_record))
+            task.delay(update_buffer)
+            bibcodes = []
+    
+    if len(bibcodes) > 0:
+        db_records = db_table.get_by_bibcodes(bibcodes)
+        update_buffer = []
+        for db_record in db_records:
+            update_buffer.append(create_clean(db_record))
+        task.delay(update_buffer)
+        
+                     
+            
 def queue_rows(bibcodes_filename, db_table, task, logger):
     """for each bibcode in file, read db row and queue row to task
     

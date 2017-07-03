@@ -105,14 +105,17 @@ class SqlSync:
         self.logger.info('row_view, created joined materialized view in schema {}'.format(self.schema))
     
     def create_delta_rows(self, baseline_schema):
-        self.logger.info('row_view, creating delta/changed table in schema {}'.format(self.schema))
+        self.logger.info('row_view, creating delta/changed and new table in schema {}'.format(self.schema))
         Session = sessionmaker()
         sess = Session(bind=self.connection)
         sql_command = SqlSync.create_changed_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
+        sql_command = SqlSync.include_new_bibcodes_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
         sess.close()
-        self.logger.info('row_view, created delta/changed table in schema {}'.format(self.schema))
+        self.logger.info('row_view, created delta/changed and new table in schema {}'.format(self.schema))
         
         
     def get_delta_table(self, meta=None):
@@ -421,6 +424,13 @@ class SqlSync:
 	   or {0}.RowViewM.readers!={1}.RowViewM.readers \
 	   or {0}.RowViewM.downloads!={1}.RowViewM.downloads \
 	   or {0}.RowViewM.reads!={1}.RowViewM.reads);'
+
+    # add the new bibcods to the table of changed bibcodes
+    include_new_bibcodes_sql = \
+        'insert into {0}.ChangedRowsM (bibcode) \
+            select {0}.canonical.bibcode from {0}.canonical left join {1}.canonical \
+            on {0}.canonical.bibcode = {1}.canonical.bibcode \
+            where {1}.canonical.bibcode IS NULL;'
 
     populate_new_bibcodes_sql = \
         'insert into {0}.newbibcodes (bibcode) \

@@ -11,9 +11,23 @@ from utils import queue_rows
 def main():
     parser = argparse.ArgumentParser(description='Read metrics records for and queue them for writing by workers')
     parser.add_argument('bibcodes_filename', type=str, help='File with bibcodes')
+    parser.add_argument('changed', type=bool, help='File with bibcodes')
     args = parser.parse_args()
-    queue_metrics(args.bibcodes_filename)
+    if args.changed:
+        pass
+    else:
+        queue_metrics(args.bibcodes_filename)
 
+
+def queue_changed_metrics(schema='metrics'):
+    nonbib = SqlSync('nonbib')
+    delta_db = nonbib.create_delta_rows('metricsstaging')
+    db_connection = app_obj.conf['METRICS_READ_CONNECTION']
+    metrics_db =  Metrics(db_schema, {'METRICS_DATABASE': db_connection})
+    queue_changed_rows(delta_db, metrics_db, metricsUpdater.tasks.task_update_metrics, logger)
+    nonbib.connection.close()
+    metrics_db.connection.close()
+    
     
 def queue_metrics(bibcodes_filename): 
     """
