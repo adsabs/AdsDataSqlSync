@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/adsabs/AdsDataSqlSync.svg)](https://travis-ci.org/adsabs/AdsDataSqlSync)
+[![Coverage Status](https://coveralls.io/repos/adsabs/AdsDataSqlSync/badge.svg)](https://coveralls.io/r/adsabs/AdsDataSqlSync)
+
 # AdsDataSqlSync
 For non-publisher ADS data
 
