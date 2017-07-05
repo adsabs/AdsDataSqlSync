@@ -1,97 +1,106 @@
-"""Contains useful functions and utilities, mostly from ADSOrcid
-"""
-
-import os
-import logging
-import imp
-import sys
-from cloghandler import ConcurrentRotatingFileHandler
+"""mostly code used by updater to update a sql table"""
 
 
-def load_config():
-    """                                                                                                 
-    Loads configuration from config.py and also from local_config.py                                    
-                                                                                                        
-    :return dictionary                                                                                  
+def queue_changed_rows(delta_table, db_table, task, logger):
+    """save queue changed metrics 
+
+    delta_table: database table holding chagned and new bibcoces
+    db_table: typically an instance of Metrics
+    task: worker function that reads from queue"""
+    bibcodes = []
+    s = select(delta_table)
+    deltas = delta_table.conn.execute(s)
+    for current in delta:
+        bibcodes.append(current)
+        if len(bibcodes) > 100:
+            db_records = db_table.get_by_bibcodes(bibcodes)
+            update_buffer = []
+            for db_record in db_records:
+                update_buffer.append(create_clean(db_record))
+            task.delay(update_buffer)
+            bibcodes = []
+    
+    if len(bibcodes) > 0:
+        db_records = db_table.get_by_bibcodes(bibcodes)
+        update_buffer = []
+        for db_record in db_records:
+            update_buffer.append(create_clean(db_record))
+        task.delay(update_buffer)
+        
+                     
+            
+def queue_rows(bibcodes_filename, db_table, task, logger):
+    """for each bibcode in file, read db row and queue row to task
+    
+    bibcodes_filename: one bibcode per line
+    db_table: follows duck typing of SqlSync and MetricsRecord
+    task: a function decorated with @app.task 
     """
-    conf = {}
-    PROJECT_HOME = os.path.abspath(os.path.join(os.path.dirname(__file__), './'))
-    if PROJECT_HOME not in sys.path:
-        sys.path.append(PROJECT_HOME)
-    conf['PROJ_HOME'] = PROJECT_HOME
+    bibcodes = []
+    final_flag = False
+    f = open(bibcodes_filename)
+    if f is None:
+        logger.error('could not open {}'.format(bibcodes_filename))
+        return
+    while True:
+        line = f.readline()
+        if len(line) == 0:
+            final_flag = True
+        else:
+            bibcode = line.strip()
+            bibcodes.append(bibcode)
 
-    conf.update(load_module(os.path.join(PROJECT_HOME, 'config.py')))
-    conf.update(load_module(os.path.join(PROJECT_HOME, 'local_config.py')))
+        if len(bibcodes) >= 100 or final_flag:
+            logger.info('time to queue data for {} bibcodes'.format(len(bibcodes)))
+            if len(bibcodes) > 0:
+                db_records = db_table.get_by_bibcodes(bibcodes)
+                update_buffer = []
+                for db_record in db_records:
+                    update_buffer.append(create_clean(db_record))
+                task.delay(update_buffer)
+            logger.info('added {} records to queue, out of {}'.format(len(update_buffer), len(bibcodes)))
+            bibcodes = []
+        if final_flag:
+            return
 
-    return conf
-
-def load_module(filename):
-    """                                                                                                 
-    Loads module, first from config.py then from local_config.py                                        
-                                                                                                        
-    :return dictionary                                                                                  
+        
+def process_rows(records, db_table, logger):
+    """write passed database rows to table
+    
+    records: a list of dicts, each representing a database row
+    db_table: follws duck typing of SqlSyc and MetricsRecord
     """
+    database_buffer = []
+    for current in records:
+        bibcode = current['bibcode']
+        # read existing record from rds                                                                                                       
+        r = db_table.read(bibcode)
+        if r:
+            # here if there is an existing record in the database, we need to do sql update                                               
+            current['id'] = r['id']
+            current['tmp_bibcode'] = bibcode
+            database_buffer.append(current)
+        else:
+            # here if this is a new record for rds                                                                                            
+            # we do not cache inserts, they are a small percentage of the traffic                                                             
+            logger.info('performing rds insert for {}'.format(bibcode))
+            db_table.connection.execute(db_table.table.insert(), [current])
 
-    filename = os.path.join(filename)
-    d = imp.new_module('config')
-    d.__file__ = filename
-    try:
-        with open(filename) as config_file:
-            exec(compile(config_file.read(), filename, 'exec'), d.__dict__)
-    except IOError as e:
-        pass
-    res = {}
-    from_object(d, res)
-    return res
+    # for improved, performance we perform a single sql update operation                                                                      
+    if len(database_buffer) > 0:
+        db_table.connection.execute(db_table.updater_sql, database_buffer)
+    logger.info('updated {} records to schema {}'.format(len(database_buffer), db_table.schema))
+    
+def create_clean(db_record):
+    """called with records about to be sent to queue
 
-
-def setup_logging(file_, name_, level='WARN'):
-    """                                                                                                 
-    Sets up generic logging to file with rotating files on disk                                         
-                                                                                                        
-    :param file_: the __file__ doc of python module that called the logging                             
-    :param name_: the name of the file that called the logging                                          
-    :param level: the level of the logging DEBUG, INFO, WARN                                            
-    :return: logging instance                                                                           
-    """
-
-    level = getattr(logging, level)
-
-    logfmt = '%(levelname)s\t%(process)d [%(asctime)s]:\t%(message)s'
-    datefmt = '%m/%d/%Y %H:%M:%S'
-    formatter = logging.Formatter(fmt=logfmt, datefmt=datefmt)
-    logging_instance = logging.getLogger(name_)
-    fn_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')), 'logs')
-    if not os.path.exists(fn_path):
-        os.makedirs(fn_path)
-    fn = os.path.join(fn_path, '{0}.log'.format(name_))
-    # since postgres also runs python command which writes to log file
-    #  log and lock files must be widely writeable
-    previous_umask = os.umask(0o000)
-    rfh = ConcurrentRotatingFileHandler(filename=fn,
-                                        maxBytes=2097152,
-                                        backupCount=5,
-                                        mode='a',
-                                        encoding='UTF-8')  # 2MB file                                   
-    os.umask(previous_umask)
-    rfh.setFormatter(formatter)
-    logging_instance.handlers = []
-    logging_instance.addHandler(rfh)
-    logging_instance.setLevel(level)
-
-    return logging_instance
-
-
-def from_object(from_obj, to_obj):
-    """Updates the values from the given object.  An object can be of one                               
-    of the following two types:                                                                         
-                                                                                                        
-    Objects are usually either modules or classes.                                                      
-    Just the uppercase variables in that object are stored in the config.                               
-                                                                                                        
-    :param obj: an import name or object                                                                
-    """
-    for key in dir(from_obj):
-        if key.isupper():
-            to_obj[key] = getattr(from_obj, key)
-
+       this function returns a new object, it does not alter the passed db_record"""
+    d = dict(db_record)
+    d.pop('id', None)   # id is primary key field, not included in queued messages
+    return d 
+    
+    
+    
+    
+    
+    

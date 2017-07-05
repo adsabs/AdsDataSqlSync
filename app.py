@@ -2,15 +2,14 @@
 import sys
 import re
 import argparse
-import utils
 import os
 from sqlalchemy.orm import sessionmaker
-
 
 import columnFileIngest
 import row_view
 import metrics
-import queue
+from adsputils import load_config, setup_logging
+
 logger = None
 config = {}
 
@@ -21,12 +20,12 @@ def load_column_files(sql_sync):
     note that the copy from program command actually runs this python code with different arguments
     """
     Session = sessionmaker()
-    sess = Session(bind=sql_sync.sql_sync_connection)
+    sess = Session(bind=sql_sync.connection)
     for t in row_view.SqlSync.all_types:
         command_args = ' --fileType ' + t +   \
-                       ' --rowViewSchemaName ' + sql_sync.schema_name + ' ingest'
+                       ' --rowViewSchemaName ' + sql_sync.schema + ' ingest'
         python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-        sql_command = 'copy ' + sql_sync.schema_name + '.' + t +  \
+        sql_command = 'copy ' + sql_sync.schema + '.' + t +  \
                       ' from program ' + python_command + ';'
 
         sess.execute(sql_command)
@@ -58,22 +57,22 @@ def main():
     parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
     parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
-    parser.add_argument('-b', '--rowViewBaselineSchemaName', default='baseline', 
+    parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | ingestMeta | createMetricsTable | dropMetricsTable ' \
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
-                        + ' | runRowViewPipeline | runMetricsPipeline ' \
+                        + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
-                        + ' | queueChangedBibcodes | queueAllBibcodes | initQueue | testQueue | runPipelines | runPipelinesDelta')
+                        + ' | runPipelines | runPipelinesDelta')
 
     args = parser.parse_args()
 
-    config.update(utils.load_config())
+    config.update(load_config())
 
     global logger
-    logger = utils.setup_logging('AdsDataSqlSync', 'AdsDataSqlSync', config['LOGGING_LEVEL'])
+    logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
     logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
 
     ingester = columnFileIngest.ColumnFileIngester(config)
@@ -108,7 +107,7 @@ def main():
         # that sql command will invoke ingest of each table
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
+        sess = Session(bind=sql_sync.connection)
         for t in row_view.SqlSync.all_types:
             command_args = ' ingest --fileType ' + t +   \
                 ' --rowViewSchemaName ' + args.rowViewSchemaName
@@ -128,7 +127,8 @@ def main():
         m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table()
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': True})
+        # m = metrics.Metrics(None, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
+        m = metrics.Metrics(None, {'FROM_SCRATCH': True, 'COPY_FROM_PROGRAM': True})
         m.update_metrics_all(args.rowViewSchemaName)
     elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
@@ -157,21 +157,12 @@ def main():
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
-    elif args.command == 'queueAllBibcodes' and args.rowViewSchemaName:
-        q = queue.Queue(args.rowViewSchemaName, config)
-        q.add_all_bibcodes()
-    elif args.command == 'queueChangedBibcodes' and args.rowViewSchemaName:
-        q = queue.Queue(args.rowViewSchemaName, config)
-        q.add_changed_bibcodes()
+    elif args.command == 'createNewBibcodes' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.build_new_bibcodes(args.rowViewBaselineSchemaName)
     elif args.command == 'logDeltaReasons' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
-    elif args.command == 'initQueue':
-        q = queue.Queue(None, config)
-        q.init_rabbitmq()
-    elif args.command == 'testQueue':
-        q = queue.Queue(None, config)
-        q.publish_to_rabbitmq(['1513hist.book.....H', '1057wjlf.book.....C'])
     elif args.command == 'runRowViewPipeline' and args.rowViewSchemaName:
         # drop tables, create tables, load data, compute metrics
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
@@ -187,14 +178,11 @@ def main():
 
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        # drop tables, rename schema, create tables, load data, compute delta, compute metrics
-        baseline_sql_sync = row_view.SqlSync(args.rowViewBaselineSchemaName, config)
-        baseline_sql_sync.drop_column_tables()
+        # read in flat files, compare to staging/baseline
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
-        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
 
-        baseline_sql_sync = None
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
        
         load_column_files(sql_sync)
@@ -215,12 +203,10 @@ def main():
         sql_sync.create_column_tables()
         load_column_files(sql_sync)
 
-
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
         load_metrics(m, args.rowViewSchemaName)
-
 
 
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
@@ -255,4 +241,3 @@ def main():
 
 if __name__ == "__main__":
     main()
- 

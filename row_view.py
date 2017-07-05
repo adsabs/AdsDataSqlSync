@@ -1,105 +1,121 @@
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean
+from sqlalchemy import Table, bindparam, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
-
-from sqlalchemy import *
 from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import CreateSchema, DropSchema
-from collections import defaultdict
-from datetime import datetime
-import time
 import sys
 import argparse
-import os
-import logging
-import utils
 
-#from settings import(ROW_VIEW_DATABASE, METRICS_DATABASE, METRICS_DATABASE2)
+from adsputils import load_config, setup_logging
+
 
 Base = declarative_base()
 
 
-# part of sql sync
-
-#sql_sync_engine = create_engine('postgresql://postgres@localhost:5432/postgres', echo=False)
-
-#sql_sync_connection = sql_sync_engine.connect()
-
 class SqlSync:
+    """manages 12 fields of nonbibliographic data
+    
+    Each nonbib data file is ingested from flat/column files to simple tables 
+    using Postgres' efficient COPY tablename FROM PROGRAM.
+    These tables are joined to create a unified row view of nonbib data.
+    
+    We use Postgres schemas so we can use sql to compare one set of ingested data against another.
+    """
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                   'reader', 'download', 'reference', 'reads')
 
     def __init__(self, schema_name, passed_config=None):
-        self.schema_name = schema_name
-        self.config = {}
-        self.config.update(utils.load_config())
+        """create connection to database, init based on config"""
+        self.schema = schema_name
+        self.config = load_config()
         if passed_config:
             self.config.update(passed_config)
+        self.logger = setup_logging('AdsDataSqlSync', level=self.config.get('LOG_LEVEL', 'INFO'))
         
         connection_string = self.config.get('INGEST_DATABASE',
                                             'postgresql://postgres@localhost:5432/postgres')
-        self.sql_sync_engine = create_engine(connection_string, echo=False)
-        self.sql_sync_connection = self.sql_sync_engine.connect()
+        self.engine = create_engine(connection_string, echo=False)
+        self.connection = self.engine.connect()
         self.meta = MetaData()
-        self.row_view_table = self.get_row_view_table()
+        self.table = self.get_row_view_table()
         
-        self.logger = logging.getLogger('AdsDataSqlSync')
+        # sql command to update row with new values, must bind on tmp_bibcode
+        self.updater_sql = self.table.update().where(self.table.c.bibcode == bindparam('tmp_bibcode')). \
+            values ({'bibcode': bindparam('bibcode'),
+                     'id': bindparam('id'),
+                     'authors': bindparam('authors'),
+                     'refereed': bindparam('refereed'),
+                     'simbad_objects': bindparam('simbad_objects'),
+                     'grants': bindparam('grants'),
+                     'citations': bindparam('citations'),
+                     'boost': bindparam('boost'),
+                     'citation_count': bindparam('citation_count'),
+                     'read_count': bindparam('read_count'),
+                     'norm_cites': bindparam('norm_cites'),
+                     'readers': bindparam('readers'),
+                     'downloads': bindparam('downloads'),
+                     'reads': bindparam('reads'),
+                     'reference': bindparam('reference')})
 
 
     def create_column_tables(self):
-        self.sql_sync_engine.execute(CreateSchema(self.schema_name))
+        self.engine.execute(CreateSchema(self.schema))
         temp_meta = MetaData()
         for t in SqlSync.all_types:
             table = self.get_table(t, temp_meta)
-        temp_meta.create_all(self.sql_sync_engine)
-        self.logger.info('row_view, created database column tables in schema {}'.format(self.schema_name))
+        temp_meta.create_all(self.engine)
+        self.logger.info('row_view, created database column tables in schema {}'.format(self.schema))
         
 
     def rename_schema(self, new_name):
-        self.sql_sync_engine.execute("alter schema {} rename to {}".format(self.schema_name, new_name))
-        self.logger.info('row_view, renamed schema {} to {} '.format(self.schema_name, new_name))
+        self.engine.execute("alter schema {} rename to {}".format(self.schema, new_name))
+        self.logger.info('row_view, renamed schema {} to {} '.format(self.schema, new_name))
 
     def drop_column_tables(self):
-        self.sql_sync_engine.execute("drop schema if exists {} cascade".format(self.schema_name))
+        """drop the entire schema"""
+        self.engine.execute("drop schema if exists {} cascade".format(self.schema))
         #temp_meta = MetaData()
         #for t in SqlSync.all_types:
         #    table = self.get_table(t, temp_meta)
-        #temp_meta.drop_all(self.sql_sync_engine)
-        #self.sql_sync_engine.execute(DropSchema(self.schema_name))
-        self.logger.info('row_view, dropped database column tables in schema {}'.format(self.schema_name))
+        #temp_meta.drop_all(self.engine)
+        #self.engine.execute(DropSchema(self.schema))
+        self.logger.info('row_view, dropped database column tables in schema {}'.format(self.schema))
 
     def create_joined_rows(self):
-        self.logger.info('row_view, creating joined materialized view in schema {}'.format(self.schema_name))
+        """join sql tables initialized from the flat/column files into a unified row view"""
+        self.logger.info('row_view, creating joined materialized view in schema {}'.format(self.schema))
         Session = sessionmaker()
-        sess = Session(bind=self.sql_sync_connection)
-        sql_command = SqlSync.create_view_sql.format(self.schema_name)
+        sess = Session(bind=self.connection)
+        sql_command = SqlSync.create_view_sql.format(self.schema)
         sess.execute(sql_command)
         sess.commit()
         
-        sql_command = 'create index on {}.RowViewM (bibcode)'.format(self.schema_name)
+        sql_command = 'create index on {}.RowViewM (bibcode)'.format(self.schema)
         sess.execute(sql_command)
-        sql_command = 'create index on {}.RowViewM (id)'.format(self.schema_name)
+        sql_command = 'create index on {}.RowViewM (id)'.format(self.schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
-        self.logger.info('row_view, created joined materialized view in schema {}'.format(self.schema_name))
+        self.logger.info('row_view, created joined materialized view in schema {}'.format(self.schema))
     
     def create_delta_rows(self, baseline_schema):
-        self.logger.info('row_view, creating delta/changed table in schema {}'.format(self.schema_name))
+        self.logger.info('row_view, creating delta/changed and new table in schema {}'.format(self.schema))
         Session = sessionmaker()
-        sess = Session(bind=self.sql_sync_connection)
-        sql_command = SqlSync.create_changed_sql.format(self.schema_name, baseline_schema)
+        sess = Session(bind=self.connection)
+        sql_command = SqlSync.create_changed_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        sql_command = SqlSync.include_new_bibcodes_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
-        self.logger.info('row_view, created delta/changed table in schema {}'.format(self.schema_name))
+        self.logger.info('row_view, created delta/changed and new table in schema {}'.format(self.schema))
         
         
     def get_delta_table(self, meta=None):
@@ -108,13 +124,43 @@ class SqlSync:
             meta = self.meta
         return Table('changedrowsm', meta,
                      Column('bibcode', String, primary_key=True),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
+
+    def get_new_bibcodes_table(self, meta=None):
+        """ table holds list of bibcodes that are not in baseline"""
+        if meta is None:
+            meta = self.meta
+        return Table('newbibcodes', meta,
+                     Column('bibcode', String, primary_key=True),
+                     schema=self.schema)
+
+    def build_new_bibcodes(self, baseline_schema):
+        self.logger.info('row_view, dropping and creating new_bibcodes table in schema {}'.format(self.schema))
+        self.engine.execute("drop table  if exists {}.newbibcodes;".format(self.schema))
+        temp_meta = MetaData()
+        table = self.get_new_bibcodes_table(temp_meta)
+        temp_meta.create_all(self.engine)
+        
+        self.logger.info('row_view, created new_bibcodes table in schema {}'.format(self.schema))
+
+        self.logger.info('row_view, populating new_bibcodes table in schame {}'.format(self.schema))
+        Session = sessionmaker()
+        sess = Session(bind=self.connection)
+        sql_command = SqlSync.populate_new_bibcodes_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        sess.close()
+        self.logger.info('row_view, populated new_bibcodes table in schame {}'.format(self.schema))
+
+
+        
+
 
     def log_delta_reasons(self, baseline_schema):
         """log the counts for the changes in each column from baseline """
         Session = sessionmaker()
-        sess = Session(bind=self.sql_sync_connection)
-        sql_command = 'select count(*) from ' + self.schema_name + '.changedrowsm'
+        sess = Session(bind=self.connection)
+        sql_command = 'select count(*) from ' + self.schema + '.changedrowsm'
         r = sess.execute(sql_command)
         m = 'total number of changed bibcodes: {}'.format(r.scalar())
         print m
@@ -124,10 +170,10 @@ class SqlSync:
                         'boost', 'citation_count', 'read_count', 'norm_cites',
                         'readers', 'downloads', 'reads', 'reference')
         for column_name in column_names:
-            sql_command = 'select count(*) from ' + self.schema_name \
+            sql_command = 'select count(*) from ' + self.schema \
                 + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
-                + ' where ' + self.schema_name + '.rowviewm.bibcode=' + baseline_schema + '.rowviewm.bibcode' \
-                + ' and ' + self.schema_name + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
+                + ' where ' + self.schema + '.rowviewm.bibcode=' + baseline_schema + '.rowviewm.bibcode' \
+                + ' and ' + self.schema + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
 
             r = sess.execute(sql_command)
             m = 'number of {} different: {}'.format(column_name, r.scalar())
@@ -143,7 +189,7 @@ class SqlSync:
         return Table('canonical', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('id', Integer),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_author_table(self, meta=None):
         if meta is None:
@@ -152,7 +198,7 @@ class SqlSync:
                      Column('bibcode', String, primary_key=True),
                      Column('authors', ARRAY(String)),
                      extend_existing=True,
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_refereed_table(self, meta=None):
         if meta is None:
@@ -160,7 +206,7 @@ class SqlSync:
         return Table('refereed', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('refereed', Boolean),
-                     schema=self.schema_name)
+                     schema=self.schema)
 
     def get_simbad_table(self, meta=None):
         if meta is None:
@@ -168,7 +214,7 @@ class SqlSync:
         return Table('simbad', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('simbad_objects', ARRAY(String)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_grants_table(self, meta=None):
         if meta is None:
@@ -176,7 +222,7 @@ class SqlSync:
         return Table('grants', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('grants', ARRAY(String)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_citation_table(self, meta=None):
         if meta is None:
@@ -184,7 +230,7 @@ class SqlSync:
         return Table('citation', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('citations', ARRAY(String)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_relevance_table(self, meta=None):
         if meta is None:
@@ -195,7 +241,7 @@ class SqlSync:
                      Column('citation_count', Integer),
                      Column('read_count', Integer),
                      Column('norm_cites', Integer),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_reader_table(self, meta=None):
         if meta is None:
@@ -203,7 +249,7 @@ class SqlSync:
         return Table('reader', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('readers', ARRAY(String)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_reads_table(self, meta=None):
         if meta is None:
@@ -211,7 +257,7 @@ class SqlSync:
         return Table('reads', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('reads', ARRAY(Integer)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_download_table(self, meta=None):
         if meta is None:
@@ -219,7 +265,7 @@ class SqlSync:
         return Table('download', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('downloads', ARRAY(Integer)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
     def get_reference_table(self, meta=None):
         if meta is None:
@@ -227,7 +273,7 @@ class SqlSync:
         return Table('reference', meta,
                      Column('bibcode', String, primary_key=True),
                      Column('reference', ARRAY(String)),
-                     schema=self.schema_name) 
+                     schema=self.schema) 
 
 
     def get_row_view_table(self, meta=None):
@@ -249,7 +295,7 @@ class SqlSync:
                      Column('downloads', ARRAY(Integer)),
                      Column('reads', ARRAY(Integer)),
                      Column('reference', ARRAY(String)),
-                     schema=self.schema_name,
+                     schema=self.schema,
                      extend_existing=True)
 
     def get_changed_rows_table(self, table_name, schema_name, meta=None):
@@ -284,11 +330,24 @@ class SqlSync:
 
 
     def get_row_view(self, bibcode):
-        # connection = sql_sync_engine.connect()
-        row_view_select = select([self.row_view_table]).where(self.row_view_table.c.bibcode == bibcode)
-        row_view_result = self.sql_sync_connection.execute(row_view_select)
+        # connection = engine.connect()
+        row_view_select = select([self.table]).where(self.table.c.bibcode == bibcode)
+        row_view_result = self.connection.execute(row_view_select)
         first = row_view_result.first()
         return first
+    
+    def read(self, bibcode):
+        """this function is used by utils where a standard name is required"""
+        return self.get_row_view(bibcode)
+
+    def get_by_bibcodes(self, bibcodes):
+        """ return a list of row view datbase objects matching the list of passed bibcodes"""
+        Session = sessionmaker()
+        sess = Session(bind=self.connection)
+        x = sess.execute(select([self.table], self.table.c.bibcode.in_(bibcodes))).fetchall()
+        sess.close()
+        return x
+
 
     def verify(self, data_dir):
         """verify that the data was properly read in
@@ -305,7 +364,7 @@ class SqlSync:
 
     def verify_aux(self, data_dir, file_name, sql_table):
         Session = sessionmaker()
-        sess = Session(bind=self.sql_sync_connection)
+        sess = Session(bind=self.connection)
         file = data_dir + file_name
         file_count = self.count_lines(file)
         sql_count = sess.query(sql_table).count()
@@ -366,8 +425,18 @@ class SqlSync:
 	   or {0}.RowViewM.downloads!={1}.RowViewM.downloads \
 	   or {0}.RowViewM.reads!={1}.RowViewM.reads);'
 
+    # add the new bibcods to the table of changed bibcodes
+    include_new_bibcodes_sql = \
+        'insert into {0}.ChangedRowsM (bibcode) \
+            select {0}.canonical.bibcode from {0}.canonical left join {1}.canonical \
+            on {0}.canonical.bibcode = {1}.canonical.bibcode \
+            where {1}.canonical.bibcode IS NULL;'
 
-
+    populate_new_bibcodes_sql = \
+        'insert into {0}.newbibcodes (bibcode) \
+            select {0}.canonical.bibcode from {0}.canonical left join {1}.canonical \
+            on {0}.canonical.bibcode = {1}.canonical.bibcode \
+            where {1}.canonical.bibcode IS NULL;'
 
 
 
@@ -389,13 +458,13 @@ if __name__ == "__main__":
     if args.command == 'downloads':
         row_view = SqlSync(args.rowViewSchema)
         Session = sessionmaker()
-        sess = Session(bind=row_view.sql_sync_connection)
+        sess = Session(bind=row_view.connection)
         t = row_view.get_download_table()
         count = 0
         with open(args.dataDir + '/reads/d1.txt') as f:
             for line in f:
                 s = select([t]).where(t.c.bibcode == line.strip())
-                rp = row_view.sql_sync_connection.execute(s)
+                rp = row_view.connection.execute(s)
                 r = rp.first()
                 if r is None:
                     print 'error', line, len(line)

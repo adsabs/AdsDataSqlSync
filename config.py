@@ -1,22 +1,15 @@
 
 
-#LOG_FILENAME = 'AdsDataSqlSync/logs/flatFileIngest.log'
-
-# possible values: WARN, INFO, DEBUG                                                                    
+# possible values: WARN, INFO, DEBUG
 LOGGING_LEVEL = 'DEBUG'
 
-#DATA_PATH = '/SpacemanSteve/tmp/columnFiles3/'
-#DATA_PATH = '/proj.adsqb/ads_abstracts/columnFiles2/'
-#DATA_PATH = '/proj.adsqb/ads_abstracts/20160831/'
 DATA_PATH = '/inputDataDir/current/'
 
 # where to read column files into
 INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
-# metrics database to use
+# metrics database used during ingest, not by celery code
 METRICS_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 
-# metrics database used for validation/comparison
-METRICS_DATABASE2 = None
 
 # filenames for column files
 DOWNLOAD = 'reads/downloads.links'
@@ -37,7 +30,38 @@ CANONICAL = 'bibcodes.list.can'
 # -1 means process all rows
 MAX_ROWS = -1
 
-#RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-RABBITMQ_URL = 'amqp://@adsx:5672/BumblebeeETL'
-RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
-RABBITMQ_ROUTE = 'SolrUpdateRoute'
+#RABBITMQ_URL = 'amqp://user:pass@host:5682/etl'
+#RABBITMQ_EXCHANGE = 'MergerPipelineExchange'
+#RABBITMQ_ROUTE = 'SolrUpdateQueue'
+
+
+# ================= celery/rabbitmq rules============== #
+# ##################################################### #
+
+ACKS_LATE=True
+PREFETCH_MULTIPLIER=1
+CELERYD_TASK_SOFT_TIME_LIMIT = 60
+
+CELERY_DEFAULT_EXCHANGE = 'import-pipeline'
+CELERY_DEFAULT_EXCHANGE_TYPE = "topic"
+
+METRICS_READ_CONNECTION = 'postgresql://postgres:postgres@localhost:55432/postgres'
+METRICS_READ_SCHEMA = 'metrics'
+
+METRICS_WRITE_CONNECTION = 'postgresql://postgres:postgres@localhost:55432/postgres'
+METRICS_WRITE_SCHEMA = 'metricsstaging'
+
+NONBIB_READ_CONNECTION = 'postgresql://postgres:postgres@localhost:55432/postgres'
+NONBIB_READ_SCHEMA = 'nonbib'
+
+NONBIB_WRITE_CONNECTION = 'postgresql://postgres:postgres@localhost:55432/postgres'
+NONBIB_WRITE_SCHEMA = 'nonbibstaging'
+
+CELERY_BROKER = 'pyamqp://guest:guest@localhost:5672/etl'
+CELERY_INCLUDE = ['nonbibUpdater.tasks', 'metricsUpdater.tasks']
+
+
+
+
+
+

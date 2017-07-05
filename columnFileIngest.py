@@ -7,8 +7,8 @@ import sys
 import re
 import argparse
 from sqlalchemy.orm import sessionmaker
-import utils
-import logging
+from adsputils import load_config, setup_logging
+
 
 
 class ColumnFileReader:
@@ -74,10 +74,10 @@ class ColumnFileIngester:
     def __init__(self, passed_config=None):
         """ passed_config available for test code """
         self.config = {}
-        self.config.update(utils.load_config())
+        self.config.update(load_config())
         if passed_config:
             self.config.update(passed_config)
-        self.logger = logging.getLogger('AdsDataSqlSync')
+        self.logger = setup_logging('AdsDataSqlSync', 'INFO')
 
         # which lists the types are in controls how they are processed
         # as_array: should values be read in as an array and output to sql as an array
@@ -178,7 +178,7 @@ class ColumnFileIngester:
         uses line combining ReadColumnFile"""
         sql_sync = SqlSync(schema_name)
         Session = sessionmaker()
-        sess = Session(bind=sql_sync.sql_sync_connection)
+        sess = Session(bind=sql_sync.connection)
         sql_table = sql_sync.get_table(passed_type)
         sql_count = sess.query(sql_table).count()
         filename = self.config['DATA_PATH'] + self.config[passed_type.upper()]
