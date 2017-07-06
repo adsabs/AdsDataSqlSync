@@ -7,7 +7,7 @@ sys.path.append(PROJECT_HOME)
 import json
 import unittest
 import mock
-from metrics import metrics
+from metrics import Metrics
 
 class metrics_test(unittest.TestCase):
 
@@ -35,7 +35,7 @@ class metrics_test(unittest.TestCase):
 
     def test_trivial_fields(self):
         """test fields that are not transformed"""
-        met = metrics.Metrics()
+        met = Metrics()
         for record in self.no_citations:
             metrics_dict = met.row_view_to_metrics(record, None)
             self.assertEqual(record['bibcode'], metrics_dict['bibcode'], 'bibcode check')
@@ -47,7 +47,7 @@ class metrics_test(unittest.TestCase):
     def test_num_fields(self):
         """test fields based on length of other fields"""
 
-        met = metrics.Metrics()
+        met = Metrics()
         for record in self.no_citations:
             metrics_dict = met.row_view_to_metrics(record, None)
             self.assertEqual(metrics_dict['citation_num'], len(record['citations']), 'citation number check')
@@ -67,7 +67,7 @@ class metrics_test(unittest.TestCase):
             [True, 1, "1994BoLMe..71..393V"],
             [False, 1, "1994GPC.....9...53M"],
             [True, 1, "1997BoLMe..85...81M"])
-        met = metrics.Metrics()
+        met = Metrics()
         metrics_dict = met.row_view_to_metrics(metrics_test.t2, m)
         self.assertEqual(len(metrics_dict['citations']), 3, 'citations check')
         self.assertEqual(len(metrics_dict['refereed_citations']), 2, 'refereed citations check')
