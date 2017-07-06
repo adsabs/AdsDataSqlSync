@@ -1,11 +1,11 @@
 
 import sys
 import os
-PROJECT_HOME = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
+PROJECT_HOME = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.append(PROJECT_HOME)
 
-import json
 import unittest
+from datetime import datetime
 import mock
 from metrics import Metrics
 
@@ -59,11 +59,15 @@ class metrics_test(unittest.TestCase):
         """test a bibcode that has citations"""
 
         test_row = metrics_test.t2 
+        t2_year = int(metrics_test.t2['bibcode'][:4])
+        today = datetime.today()
+        t2_age = max(1.0, today.year - t2_year + 1) 
+
         # we mock row view select for citation data with hard coded results
         #   for row_view_to_metrics to use ([refereed, len(reference), bibcode], ...)
         m = mock.Mock()
-        m.schema_name = "None"
-        m.sql_sync_connection.execute.return_value = (
+        m.schema = "None"
+        m.connection.execute.return_value = (
             [True, 1, "1994BoLMe..71..393V"],
             [False, 1, "1994GPC.....9...53M"],
             [True, 1, "1997BoLMe..85...81M"])
@@ -76,9 +80,9 @@ class metrics_test(unittest.TestCase):
         rn_citation_data_0 = {'ref_norm': 0.2, 'pubyear': 1997, 'auth_norm': 0.2, 
                               'bibcode': '1994BoLMe..71..393V', 'cityear': 1994}
         self.assertEqual(metrics_dict['rn_citation_data'][0], rn_citation_data_0, 'rn citation data')
-        self.assertEqual(metrics_dict['an_refereed_citations'], 0.0, 'an refereed citations')
+        self.assertAlmostEqual(metrics_dict['an_refereed_citations'], 2. / t2_age, 5, 'an refereed citations')
         self.assertAlmostEqual(metrics_dict['rn_citations'], .6, 5, 'rn citations')
-        print metrics_dict
+
         
 if __name__ == '__main__':
     unittest.main(verbosity=2)
