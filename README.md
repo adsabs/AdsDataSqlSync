@@ -2,7 +2,7 @@
 [![Coverage Status](https://coveralls.io/repos/adsabs/AdsDataSqlSync/badge.svg)](https://coveralls.io/r/adsabs/AdsDataSqlSync)
 
 # AdsDataSqlSync
-For non-publisher ADS data
+Pipeline for non-bibliographic data.
 
 This library:
   * Imports column/flat files into SQL column tables
