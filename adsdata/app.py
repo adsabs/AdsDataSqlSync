@@ -5,32 +5,62 @@ import argparse
 import os
 from sqlalchemy.orm import sessionmaker
 
-import columnFileIngest
 import row_view
 import metrics
+import reader
 from adsputils import load_config, setup_logging
 
 logger = None
 config = {}
 
-
-def load_column_files(sql_sync):
-    """ generate and run sql 'copy from program' commands to load column files
-    and, create joined row view 
-    note that the copy from program command actually runs this python code with different arguments
+def test_load_column_files(sql_sync):
+    """ use cursor/psycopg.copy_from to data from column file to postgres
+    
+    after data has been loaded, join to create a unified row view 
     """
-    Session = sessionmaker()
-    sess = Session(bind=sql_sync.connection)
-    for t in row_view.SqlSync.all_types:
-        command_args = ' --fileType ' + t +   \
-                       ' --rowViewSchemaName ' + sql_sync.schema + ' ingest'
-        python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-        sql_command = 'copy ' + sql_sync.schema + '.' + t +  \
-                      ' from program ' + python_command + ';'
 
-        sess.execute(sql_command)
-        sess.commit()
-    sess.close()
+    conn = sql_sync.engine.raw_connection()
+    cur = conn.cursor()
+    table_name = sql_sync.schema + '.' + 'canonical'
+    f = reader.BibcodeFileReader('/Users/SpacemanSteve/tmp/bibcodes.list.can.20170522') #../tests/data/testBibcodes120.txt')
+    f = reader.BibcodeFileReader('../tests/data/testBibcodes2.txt')
+    cur.copy_from(f, table_name)
+    conn.commit()
+    table_name = sql_sync.schema + '.' + 'refereed'
+    f = reader.RefereedFileReader('../tests/data/testBibcodes2.txt')
+    cur.copy_from(f, table_name)
+    conn.commit()
+    table_name = sql_sync.schema + '.' + 'author'
+    f = reader.StandardFileReader('author', '../tests/data/data1/facet_authors/all.links')
+    cur.copy_from(f, table_name)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def load_column_files(config, sql_sync):
+    """ use psycopg.copy_from to data from column file to postgres
+    
+    after data has been loaded, join to create a unified row view 
+    """
+    conn = sql_sync.engine.raw_connection()
+    cur = conn.cursor()
+    
+    for t in row_view.SqlSync.all_types:
+        table_name = sql_sync.schema + '.' + t
+        logger.info('processing {}'.format(table_name))
+        filename = config['DATA_PATH'] + config[t.upper()]
+        if t == 'canonical':
+            r = reader.BibcodeFileReader(filename)
+        elif t == 'refereed':
+            r = reader.RefereedFileReader(filename) 
+        else:
+            r = reader.StandardFileReader(t, filename)
+        if r:
+            cur.copy_from(r, table_name)
+            conn.commit()
+
+    cur.close()
+    conn.close()
     sql_sync.create_joined_rows()
 
 def load_metrics(m, row_view_schema):
@@ -75,24 +105,7 @@ def main():
     logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
     logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
 
-    ingester = columnFileIngest.ColumnFileIngester(config)
-
-    if args.command == 'ingest' and args.fileType == 'all':
-        # all is only useful for testing, sending output to the console
-        for t in row_view.SqlSync.all_types:
-            print
-            print t
-            ingester.process_file(t)
-    elif args.command == 'ingest' and args.fileType:
-        ingester.process_file(args.fileType)
-
-    elif args.command == 'verify' and args.fileType == 'all':
-        for t in row_view.SqlSync.all_types:
-            ingester.verify_file(t, args.rowViewSchemaName)
-    elif args.command == 'verify' and args.fileType:
-        ingester.verify_file(args.fileType, args.rowViewSchemaName)
-
-    elif args.command == 'createIngestTables':
+    if args.command == 'createIngestTables':
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_column_tables()
     elif args.command == 'dropIngestTables':
@@ -163,12 +176,17 @@ def main():
     elif args.command == 'logDeltaReasons' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+    elif args.command == 'test':
+        sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
+        sql_sync.drop_column_tables()
+        sql_sync.create_column_tables()
+        test_load_column_files(sql_sync)
     elif args.command == 'runRowViewPipeline' and args.rowViewSchemaName:
         # drop tables, create tables, load data, compute metrics
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
-        load_column_files(sql_sync)
+        load_column_files(config, sql_sync)
 
     elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
@@ -185,7 +203,7 @@ def main():
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
        
-        load_column_files(sql_sync)
+        load_column_files(config, sql_sync)
 
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
@@ -201,7 +219,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.drop_column_tables()
         sql_sync.create_column_tables()
-        load_column_files(sql_sync)
+        load_column_files(config, sql_sync)
 
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
@@ -220,7 +238,7 @@ def main():
         sql_sync = row_view.SqlSync(args.rowViewSchemaName, config)
         sql_sync.create_column_tables()
        
-        load_column_files(sql_sync)
+        load_column_files(config, sql_sync)
 
         sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
