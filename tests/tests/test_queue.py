@@ -5,7 +5,7 @@ import unittest
 import math
 from mock import Mock 
 
-from utils import queue_rows, process_rows
+from adsdata.utils import queue_rows, process_rows
 
 class test_queue(unittest.TestCase):
 
