@@ -82,7 +82,7 @@ class StandardFileReader(ADSClassicInputStream):
         #  for example, we don't quote bibcode, but we do names of authors
         self.quote_values = ('author','simbad','grants')
         # tab_separator: is the tab a separator in the input data
-        self.tab_separated_values = ('author')
+        self.tab_separated_values = ('author', 'download', 'reads')
         
     def read(self, size=-1):
         line = self._iostream.readline()
@@ -92,7 +92,8 @@ class StandardFileReader(ADSClassicInputStream):
         bibcode = line[:19]
         value = line[20:-1]
         match = self._bibcode_match(bibcode)
-        if match and isinstance(value, str):
+
+        if self.file_type in (self.array_types):
             value = [value]
         while match:
             line = self._iostream.readline()
@@ -145,7 +146,7 @@ class StandardFileReader(ADSClassicInputStream):
             values = value.split('\t')
             # should check for double quotes in names
             for v in values:
-                if quote_value:
+                if quote_value and v[0] != '"':
                     v = '"' + v + '"'
                 if len(return_value) == 0:
                     return_value = v
@@ -156,7 +157,7 @@ class StandardFileReader(ADSClassicInputStream):
             # array of values to conver to sql 
             for v in value:
                 v = v.replace('\t', ' ')
-                if quote_value:
+                if quote_value and v[0] != '"':
                     v = '"' + v + '"'
                 if len(return_value) == 0:
                     return_value = v 
@@ -164,7 +165,7 @@ class StandardFileReader(ADSClassicInputStream):
                     return_value += output_separator + v
     
         elif isinstance(value, str):
-            if quote_value:
+            if quote_value and value[0] != '"':
                 return_value = '"' + value + '"'
             else:
                 return_value = value
