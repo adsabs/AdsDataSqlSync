@@ -4,6 +4,7 @@
 LOGGING_LEVEL = 'DEBUG'
 
 DATA_PATH = '/inputDataDir/current/'
+TEST_DATA_PATH = 'tests/data/data1/'
 
 # where to read column files into
 INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'

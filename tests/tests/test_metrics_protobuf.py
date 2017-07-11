@@ -5,7 +5,7 @@ import unittest
 
 from adsmsg.metrics_record import MetricsRecord as ProtobufMetricsRecord
 from adsmsg.metrics_record import MetricsRecordList as ProtobufMetricsRecordList
-from utils import create_clean
+from adsdata.utils import create_clean
 
 class test_serialize(unittest.TestCase):
     

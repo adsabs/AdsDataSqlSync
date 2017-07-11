@@ -3,7 +3,8 @@ from sqlalchemy import Table, bindparam, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
+#from sqlalchemy import create_engine
+import sqlalchemy
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from sqlalchemy.sql import select
@@ -43,7 +44,7 @@ class Metrics():
         self.schema = metrics_schema
         self.table = self.get_metrics_table()
         self.database = self.config.get('METRICS_DATABASE', 'postgresql://postgres:postgres@localhost:5432/postgres')
-        self.engine = create_engine(self.database, connect_args={'connect_timeout': 3})
+        self.engine = sqlalchemy.create_engine(self.database, connect_args={'connect_timeout': 3})
         self.connection = self.engine.connect()
         # if true, don't bother checking if metrics database has bibcode, assume db insert
         self.from_scratch = self.config.get('FROM_SCRATCH', True)
