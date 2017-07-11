@@ -76,10 +76,10 @@ class StandardFileReader(ADSClassicInputStream):
         # the following lists controls how they are processed
         # as_array: should values be read in as an array and output to sql as an array
         #  for example, downloads and grants are an array while relevance has several distinct values but isn't an array
-        self.array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad')
+        self.array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad', 'ned')
         # quote_value: should individual values sent to sql be in quotes.  
         #  for example, we don't quote bibcode, but we do names of authors
-        self.quote_values = ('author','simbad','grants')
+        self.quote_values = ('author','simbad','grants', 'ned')
         # tab_separator: is the tab a separator in the input data
         self.tab_separated_values = ('author', 'download', 'reads')
         
