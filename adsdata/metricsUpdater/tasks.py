@@ -2,7 +2,7 @@
 from __future__ import absolute_import, unicode_literals
 
 import sys, os
-sys.path.append("..")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import re
 from kombu import Queue
 from celery.signals import worker_process_init, worker_process_shutdown, user_preload_options
@@ -11,7 +11,7 @@ from metricsUpdater import app as app_module
 from metrics import Metrics
 from utils import process_rows
 
-app = app_module.MetricsUpdaterCelery('metrics-updater')
+app = app_module.MetricsUpdaterCelery('metrics-updater', proj_home=os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 logger = app.logger
 metrics_rds = None
 
