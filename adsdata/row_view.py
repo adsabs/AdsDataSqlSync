@@ -28,7 +28,7 @@ class SqlSync:
     """
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
-                  'reader', 'download', 'reference', 'reads')
+                  'reader', 'download', 'reference', 'reads', 'ned')
 
     def __init__(self, schema_name, passed_config=None):
         """create connection to database, init based on config"""
@@ -52,6 +52,7 @@ class SqlSync:
                      'authors': bindparam('authors'),
                      'refereed': bindparam('refereed'),
                      'simbad_objects': bindparam('simbad_objects'),
+                     'ned_objects': bindparam('ned_objects'),
                      'grants': bindparam('grants'),
                      'citations': bindparam('citations'),
                      'boost': bindparam('boost'),
@@ -168,7 +169,7 @@ class SqlSync:
         
         column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
                         'boost', 'citation_count', 'read_count', 'norm_cites',
-                        'readers', 'downloads', 'reads', 'reference')
+                        'readers', 'downloads', 'reads', 'reference', 'ned_objects')
         for column_name in column_names:
             sql_command = 'select count(*) from ' + self.schema \
                 + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
@@ -215,6 +216,14 @@ class SqlSync:
                      Column('bibcode', String, primary_key=True),
                      Column('simbad_objects', ARRAY(String)),
                      schema=self.schema) 
+
+    def get_ned_table(self, meta=None):
+        if meta is None:
+            meta = self.meta
+        return Table('ned', meta,
+                     Column('bibcode', String, primary_key=True),
+                     Column('ned_objects', ARRAY(String)),
+                     schema=self.schema)
 
     def get_grants_table(self, meta=None):
         if meta is None:
@@ -285,6 +294,7 @@ class SqlSync:
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
                      Column('simbad_objects', ARRAY(String)),
+                     Column('ned_objects', ARRAY(String)),
                      Column('grants', ARRAY(String)),
                      Column('citations', ARRAY(String)),
                      Column('boost', Float),
@@ -307,6 +317,7 @@ class SqlSync:
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
                      Column('simbad_objects', ARRAY(String)),
+                     Column('ned_objects', ARRAY(String)),
                      Column('grants', ARRAY(String)),
                      Column('citations', ARRAY(String)),
                      Column('boost', Float),
@@ -389,6 +400,7 @@ class SqlSync:
               coalesce(authors, ARRAY[]::text[]) as authors,    \
               coalesce(refereed, FALSE) as refereed,            \
               coalesce(simbad_objects, ARRAY[]::text[]) as simbad_objects,  \
+              coalesce(ned_objects, ARRAY[]::text[]) as ned_objects,  \
               coalesce(grants, ARRAY[]::text[]) as grants,      \
               coalesce(citations, ARRAY[]::text[]) as citations,\
               coalesce(boost, 0) as boost,                      \
@@ -415,6 +427,7 @@ class SqlSync:
            and ({0}.RowViewM.authors!={1}.RowViewM.authors \
 	   or {0}.RowViewM.refereed!={1}.RowViewM.refereed \
 	   or {0}.RowViewM.simbad_objects!={1}.RowViewM.simbad_objects \
+           or {0}.RowViewM.ned_objects!={1}.RowViewM.ned_objects \
 	   or {0}.RowViewM.grants!={1}.RowViewM.grants \
 	   or {0}.RowViewM.citations!={1}.RowViewM.citations \
 	   or {0}.RowViewM.boost!={1}.rowViewM.boost \
