@@ -414,13 +414,13 @@ class SqlSync:
        from {0}.Canonical natural left join {0}.Author \
        natural left join {0}.Refereed                 \
        natural left join {0}.Simbad natural left join {0}.Grants \
-       natural left join {0}.Citation                 \
+       natural left join {0}.Citation  natural left join {0}.Ned   \
        natural left join {0}.Relevance natural left join {0}.Reader \
        natural left join {0}.Download natural left join {0}.Reads   \
        natural left join {0}.Reference;' 
 
     create_changed_sql = \
-        'create materialized view {0}.ChangedRowsM as \
+        'create table {0}.ChangedRowsM as \
          select {0}.RowViewM.bibcode, {0}.RowViewM.id \
          from {0}.RowViewM,{1}.RowViewM \
          where {0}.RowViewM.bibcode={1}.RowViewM.bibcode  \
