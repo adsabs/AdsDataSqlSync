@@ -49,7 +49,7 @@ class Metrics():
         # if true, don't bother checking if metrics database has bibcode, assume db insert
         self.from_scratch = self.config.get('FROM_SCRATCH', True)
         # if true, send data to stdout
-        self.copy_from_program = self.config.get('COPY_FROM_PROGRAM', True)
+        self.copy_from_program = self.config.get('COPY_FROM_PROGRAM', False)
         self.upserts = []
 
         # sql command to update a row in the metrics table
