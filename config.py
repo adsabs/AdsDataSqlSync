@@ -7,7 +7,7 @@ DATA_PATH = '/inputDataDir/current/'
 TEST_DATA_PATH = 'tests/data/'
 
 # where to read column files into
-INGEST_DATABASE = 'postgres://postgres@localhost:5432/data_pipeline'
+INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database used during ingest, not by celery code
 METRICS_DATABASE = INGEST_DATABASE
 
