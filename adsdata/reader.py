@@ -120,9 +120,15 @@ class StandardFileReader(ADSClassicInputStream):
         if len(line) == 0  or (self.config['MAX_ROWS'] > 0 and self.read_count > self.config['MAX_ROWS']):
             self.logger.info('nonbib bile ingest, processed {}, contained {} lines'.format(self._file, self.read_count))
             return ''
-        # does the next line match the current bibcode?
+
         bibcode = line[:19]
+        while ' ' in bibcode or '\t' in bibcode:
+            self.logger.error('invalid bibcode {} in file {}'.format(bibcode, self._file))
+            line = self._iostream.readline()
+            bibcode = line[:19]
         value = line[20:-1]
+
+        # does the next line match the current bibcode?
         match = self._bibcode_match(bibcode)
 
         if self.file_type in (self.array_types):
