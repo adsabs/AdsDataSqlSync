@@ -14,6 +14,7 @@ logger = app.logger
 
 app.conf.CELERY_QUEUES = (
     Queue('output-results', app.exchange, routing_key='output-results'),
+    Queue('output-metrics', app.exchange, routing_key='output-metrics'),
 )
 
 
@@ -37,6 +38,26 @@ def task_output_results(msg):
     :return: no return
     """
     logger.debug('Will forward this nonbib record: %s', msg)
+    app.forward_message(msg)
+
+
+@app.task(queue='output-metrics')
+def task_output_metrics(msg):
+    """
+    This worker will forward metrics to the outside
+    exchange (typically an ADSMasterPipeline) to be
+    incorporated into the storage
+
+    :param msg: a protobuf containing the metrics record
+
+            {'bibcode': '....',
+             'downloads': [....],
+             'citations': [.....],
+             .....
+            }
+    :return: no return
+    """
+    logger.debug('Will forward this metrics record: %s', msg)
     app.forward_message(msg)
 
 if __name__ == '__main__':

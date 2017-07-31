@@ -10,9 +10,9 @@ from adsdata import row_view
 from adsdata import metrics
 from adsdata import reader
 from adsputils import load_config, setup_logging
-from adsmsg import NonBibRecord
+from adsmsg import NonBibRecord, MetricsRecord
 
-from adsdata.tasks import task_output_results
+from adsdata.tasks import task_output_results, task_output_metrics
 
 logger = None
 config = {}
@@ -44,21 +44,7 @@ def load_column_files(config, sql_sync):
     conn.close()
     sql_sync.create_joined_rows()
 
-def load_metrics(m, row_view_schema):
-    """
-    """
-    Session = sessionmaker()
-    sess = Session(bind=m.connection)
-    command_args = ' populateMetricsTable '  \
-                   + ' --rowViewSchemaName ' + row_view_schema \
-                   + ' --metricsSchemaName ' + m.schema
-    python_command = "'python " + os.path.abspath(__file__) + command_args + "'"
-    sql_command = 'copy ' + m.schema + '.metrics'   \
-                  + ' from program ' + python_command + ';'
-    
-    sess.execute(sql_command)
-    sess.commit()
-    sess.close()
+
 
 def nonbib_to_master_pipeline(schema):
     """send all nonbib data to queue for delivery to master pipeline"""
@@ -77,7 +63,7 @@ def nonbib_to_master_pipeline(schema):
 def nonbib_delta_to_master_pipeline(schema):
     """send data for changed bibcodes to master pipeline
 
-    the delta talbe is computed by comparing to sets of nonbib data
+    the delta table was computed by comparing to sets of nonbib data
     perhaps ingested on succesive days"""
     nonbib = row_view.SqlSync(schema)
     connection = nonbib.engine.connect()
@@ -89,6 +75,39 @@ def nonbib_delta_to_master_pipeline(schema):
         rec = NonBibRecord(**dict(row))
         logger.debug("Calling 'app.forward_message' with '%s'", str(rec))
         task_output_results.delay(rec)
+
+def metrics_to_master_pipeline(schema):
+    """send all metrics data to queue for delivery to master pipeline"""
+    m = metrics.Metrics(schema)
+    connection = m.engine.connect()
+    s = select([m.table])
+    results = connection.execute(s)
+    for current_row in results:
+        current_row = dict(current_row)
+        current_row.pop('id')
+        logger.debug('Will forward this metrics record: %s', current_row)
+        rec = MetricsRecord(**current_row)
+        logger.debug("Calling metrics 'app.forward_message' with '%s'", str(rec))
+        task_output_metrics.delay(rec)
+
+def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema):
+    """send data for changed metrics to master pipeline
+
+    the delta table was computed by comparing to sets of nonbib data
+    perhaps ingested on succesive days"""
+    m = metrics.Metrics(metrics_schema)
+    nonbib = row_view.SqlSync(nonbib_schema)
+    connection = nonbib.engine.connect()
+    delta_table = nonbib.get_delta_table()
+    s = select([delta_table])
+    results = connection.execute(s)
+    for current_delta in results:
+        row = m.read(current_delta['bibcode'])
+        row.pop('id')
+        rec = MetricsRecord(**dict(row))
+        logger.debug("Calling 'app.forward_message' with '%s'", str(rec))
+        task_output_metrics.delay(rec)
+
 
 def diagnose():
     """send hard coded nonbib data the master pipeline
@@ -128,7 +147,8 @@ def main():
                         + ' | populateMetricsTable | populateMetricsTableMeta | createDeltaRows | populateMetricsTableDelta ' \
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
-                        + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline')
+                        + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline'
+                        + ' | metricsToMasterPipeline')
 
     args = parser.parse_args()
 
@@ -174,7 +194,7 @@ def main():
         m.drop_metrics_table()
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
         # m = metrics.Metrics(None, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
-        m = metrics.Metrics(None, {'FROM_SCRATCH': True, 'COPY_FROM_PROGRAM': True})
+        m = metrics.Metrics(None, {'FROM_SCRATCH': True, 'COPY_FROM_PROGRAM': False})
         m.update_metrics_all(args.rowViewSchemaName)
     elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
@@ -183,7 +203,7 @@ def main():
         # run copy from program command
         # that sql command will populate metrics table
         # create metrics to get a database connection for session
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': False})
         Session = sessionmaker()
         sess = Session(bind=m.connection)
 
@@ -222,10 +242,11 @@ def main():
         load_column_files(config, sql_sync)
 
     elif args.command == 'runMetricsPipeline' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
+        m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table()
         m.create_metrics_table()
-        load_metrics(m, args.rowViewSchemaName)
+        m.update_metrics_all(args.rowViewSchemaName)
+
 
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
@@ -257,7 +278,7 @@ def main():
         m = metrics.Metrics(args.metricsSchemaName, {'COPY_FROM_PROGRAM': True})
         m.drop_metrics_table()
         m.create_metrics_table()
-        load_metrics(m, args.rowViewSchemaName)
+        m.update_metrics_all(args.rowViewSchemaName)
 
 
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
@@ -285,6 +306,10 @@ def main():
     elif args.command == 'nonbibDeltaToMasterPipeline':
         print 'diagnose = ', args.diagnose
         nonbib_delta_to_master_pipeline(args.rowViewSchemaName)
+    elif args.command == 'metricsToMasterPipeline':
+        metrics_to_master_pipeline(args.metricsSchemaName)
+    elif args.command == 'metricsDeltaToMasterPipeline':
+        nonbib_delta_to_master_pipeline(args.metricsSchemaName, args.rowViewSchemaName)
 
     else:
         print 'app.py: illegal command or missing argument, command = ', args.command

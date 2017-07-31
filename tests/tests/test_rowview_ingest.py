@@ -10,11 +10,12 @@ class test_rowview_ingest(unittest.TestCase):
     def setUp(self):
         self.config = {}
         self.config.update(load_config())
-
+        if self.config['MAX_ROWS'] != -1:
+            self.assertTrue(False, 'tests fail when local_config.py sets MAX_ROWS')
 
     def test_bibcode_reader(self):
         """verify bibcode reader adds id to every line"""
-        filename = self.config['TEST_DATA_PATH'] + self.config['CANONICAL']
+        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['CANONICAL']
         lines_in_file = sum(1 for line in open(filename))
         r = reader.BibcodeFileReader(filename)
         bibcode_count = 0
@@ -31,7 +32,7 @@ class test_rowview_ingest(unittest.TestCase):
     
     def test_refereed_reader(self):  
         """verify refereed reader adds True to every line"""
-        filename = self.config['TEST_DATA_PATH'] + self.config['REFEREED']
+        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['REFEREED']
         lines_in_file = sum(1 for line in open(filename))
         r = reader.RefereedFileReader(filename)
         bibcode_count = 0
@@ -124,14 +125,14 @@ class test_rowview_ingest(unittest.TestCase):
         self.standard_reader_test('reader', spot_checks)
         
         
-    def standard_reader_test(self, file_type, spot_checks):  
+    def standard_reader_test(self, file_type, spot_checks, data_dir='data1/'):  
         """verify standard reader creates the correct sql value
         
         spot_checks is a list of (bibcode, value) pairs to verify.
         spot_checks might include first and last bibcodes in file 
         and other interesting or edge cases.
         """
-        filename = self.config['TEST_DATA_PATH'] + self.config[file_type.upper()]
+        filename = self.config['TEST_DATA_PATH'] + data_dir + self.config[file_type.upper()]
         lines_in_file = sum(1 for line in open(filename))
         r = reader.StandardFileReader(file_type, filename)
         bibcode_count = 0
@@ -151,7 +152,7 @@ class test_rowview_ingest(unittest.TestCase):
                 self.assertEqual(2, len(parts), '{} lines should only include bibcode and value array {}'.format(file_type, line))
                 self.assertEqual('{', value[0], 'invalid sql array {}'.format(value))
                 self.assertEqual('}', value[-1], 'invalid sql array {}'.format(value))
-            # we spot check a couple author fields
+            # we spot check a couple fields
             for spot_check in spot_checks:
                 spot_bibcode = spot_check[0]
                 if bibcode == spot_bibcode:
@@ -165,6 +166,22 @@ class test_rowview_ingest(unittest.TestCase):
         if file_type not in multi_line:
             self.assertEqual(lines_in_file, bibcode_count, 
                              '{} standard reader returned wrong number of lines'.format(file_type))    
+
+    def test_bad_bibcode(self):
+        """bad bicode in input file should be logged and skipped and rest of file processed
+
+        one bad bibcode in a downloads file"""
+        file_type = 'download'
+        filename = self.config['TEST_DATA_PATH'] + 'dataInvalid/'+ self.config[file_type.upper()]
+        lines_in_file = sum(1 for line in open(filename))
+        r = reader.StandardFileReader(file_type, filename)
+        bibcode_count = 0
+        line = r.read()
+        while line:
+            bibcode_count +=  1
+            line = r.read()
+        self.assertEqual(bibcode_count, lines_in_file-1, 'bad bibcode in file not skipped')
+
 
 
 if __name__ == '__main__':
