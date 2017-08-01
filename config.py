@@ -3,7 +3,7 @@
 # possible values: WARN, INFO, DEBUG
 LOGGING_LEVEL = 'DEBUG'
 
-DATA_PATH = '/inputDataDir/current/'
+DATA_PATH = '/inputDataDir/'
 TEST_DATA_PATH = 'tests/data/'
 
 # where to read column files into
@@ -13,20 +13,23 @@ METRICS_DATABASE = INGEST_DATABASE
 
 
 # filenames for column files
-DOWNLOAD = 'reads/downloads.links'
-READS = 'reads/all.links'
-RELEVANCE = 'relevance/docmetrics.tab'
-AUTHOR = 'facet_authors/all.links'
-REFERENCE = 'reference/all.links'
-SIMBAD = 'simbad/simbad_objects.tab'
-# final location of ned data has not been determined
-# currently it is not next to other nonbib data
-NED = '../config/links/ned/ned_objects.tab'
-GRANTS = 'grants/all.links'
-CITATION = 'citation/all.links'
-READER = 'alsoread_bib/all.links'
-REFEREED = 'refereed/all.links'
-CANONICAL = 'bibcodes.list.can'
+AUTHOR = 'config/links/facet_authors/all.links'
+CANONICAL = 'config/bibcodes.list.can'
+CITATION = 'config/links/citation/all.links'
+DOWNLOAD = 'config/links/reads/downloads.links'
+GRANTS = 'config/links/grants/all.links'
+NED = 'config/links/ned/ned_objects.tab'
+READER = 'config/links/alsoread_bib/all.links'
+READS = 'config/links/reads/all.links'
+REFEREED = 'config/links/refereed/all.links'
+REFERENCE = 'config/links/reference/all.links'
+RELEVANCE = 'config/links/relevance/docmetrics.tab'
+SIMBAD = 'config/links/simbad/simbad_objects.tab'
+
+
+
+
+
 
 # number of rows of column file to process
 # set to a small number during testing to ingest just a little data quickly

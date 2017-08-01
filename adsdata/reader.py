@@ -118,7 +118,7 @@ class StandardFileReader(ADSClassicInputStream):
             self.logger.debug('nonbib file ingest, processing {}, count = {}'.format(self.file_type, self.read_count))
         line = self._iostream.readline()
         if len(line) == 0  or (self.config['MAX_ROWS'] > 0 and self.read_count > self.config['MAX_ROWS']):
-            self.logger.info('nonbib bile ingest, processed {}, contained {} lines'.format(self._file, self.read_count))
+            self.logger.info('nonbib file ingest, processed {}, contained {} lines'.format(self._file, self.read_count))
             return ''
 
         bibcode = line[:19]
