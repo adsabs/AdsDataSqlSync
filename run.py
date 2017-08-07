@@ -10,8 +10,7 @@ from adsdata import row_view
 from adsdata import metrics
 from adsdata import reader
 from adsputils import load_config, setup_logging
-from adsmsg import NonBibRecord, MetricsRecord
-
+from adsmsg import NonBibRecord, NonBibRecordList, MetricsRecord, MetricsRecordList
 from adsdata.tasks import task_output_results, task_output_metrics
 
 logger = None
@@ -46,21 +45,33 @@ def load_column_files(config, sql_sync):
 
 
 
-def nonbib_to_master_pipeline(schema):
+def nonbib_to_master_pipeline(schema, batch_size=1):
     """send all nonbib data to queue for delivery to master pipeline"""
     nonbib = row_view.SqlSync(schema)
     connection = nonbib.engine.connect()
     s = select([nonbib.table])
     results = connection.execute(s)
+    tmp = []
     for current_row in results:
         current_row = dict(current_row)
-        logger.debug('Will forward this record: %s', current_row)
         rec = NonBibRecord(**current_row)
-        logger.debug("Calling 'app.forward_message' with '%s'", str(rec))
-        task_output_results.delay(rec)
+        tmp.append(rec._data)
+        if len(tmp) >= batch_size:
+            recs = NonBibRecordList()
+            recs.nonbib_records.extend(tmp)
+            tmp = []
+            logger.debug("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
+            task_output_results.delay(recs)
+
+    if len(tmp) > 0:
+        recs = NonBibRecordList()
+        recs.nonbib_records.extend(tmp)
+        logger.debug("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
+        task_output_results.delay(recs)
 
 
-def nonbib_delta_to_master_pipeline(schema):
+
+def nonbib_delta_to_master_pipeline(schema, batch_size=1):
     """send data for changed bibcodes to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
@@ -70,27 +81,54 @@ def nonbib_delta_to_master_pipeline(schema):
     delta_table = nonbib.get_delta_table()
     s = select([delta_table])
     results = connection.execute(s)
+    tmp = []
     for current_delta in results:
         row = nonbib.get_row_view(current_delta['bibcode'])
         rec = NonBibRecord(**dict(row))
-        logger.debug("Calling 'app.forward_message' with '%s'", str(rec))
-        task_output_results.delay(rec)
+        tmp.append(rec._data)
+        if len(tmp) >= batch_size:
+            recs = NonBibRecordList()
+            recs.nonbib_records.extend(tmp)
+            tmp = []
+            logger.debug("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
+            task_output_results.delay(recs)
 
-def metrics_to_master_pipeline(schema):
+    if len(tmp) > 0:
+        recs = NonBibRecordList()
+        recs.nonbib_records.extend(tmp)
+        logger.debug("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
+        task_output_results.delay(recs)
+
+
+def metrics_to_master_pipeline(schema, batch_size=1):
     """send all metrics data to queue for delivery to master pipeline"""
     m = metrics.Metrics(schema)
     connection = m.engine.connect()
     s = select([m.table])
     results = connection.execute(s)
+    tmp = []
     for current_row in results:
         current_row = dict(current_row)
         current_row.pop('id')
         logger.debug('Will forward this metrics record: %s', current_row)
         rec = MetricsRecord(**current_row)
-        logger.debug("Calling metrics 'app.forward_message' with '%s'", str(rec))
-        task_output_metrics.delay(rec)
+        tmp.append(rec._data)
+        if len(tmp) >= batch_size:
+            recs = MetricsRecordList()
+            recs.metrics_records.extend(tmp)
+            logger.debug("Calling metrics 'app.forward_message' with '%s' records", len(recs.metrics_records))
+            task_output_metrics.delay(recs)
+            tmp = []
 
-def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema):
+    if len(tmp) > 0:
+        recs = MetricsRecordList()
+        recs.metrics_records.extend(tmp)
+        logger.debug("Calling metrics 'app.forward_message' with final '%s' records", len(recs.metrics_records))
+        task_output_metrics.delay(recs)
+
+
+
+def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema, batch_size=1):
     """send data for changed metrics to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
@@ -101,12 +139,25 @@ def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema):
     delta_table = nonbib.get_delta_table()
     s = select([delta_table])
     results = connection.execute(s)
+    tmp = []
     for current_delta in results:
         row = m.read(current_delta['bibcode'])
         row.pop('id')
         rec = MetricsRecord(**dict(row))
-        logger.debug("Calling 'app.forward_message' with '%s'", str(rec))
-        task_output_metrics.delay(rec)
+        tmp.append(rec._data)
+        if len(recs.metrics_records) >= batch_size:
+            recs = MetricsRecordList()
+            recs.metrics_records.extend(tmp)
+            logger.debug("Calling metrics 'app.forward_message' with '%s' messages", len(recs.metrics_records))
+            task_output_metrics.delay(recs)
+            tmp = []
+
+    if len(tmp) > 0:
+        recs = MetricsRecordList()
+        recs.metrics_records.extend(tmp)
+        logger.debug("Calling metrics 'app.forward_message' with final '%s'", str(rec))
+        task_output_metrics.delay(recs)
+
 
 
 def diagnose():
@@ -120,8 +171,9 @@ def diagnose():
                  'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
                  'reference': ['c', 'd'], 
                  'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5]}
-    # check readers!
+    recs = NonBibRecordList()
     rec = NonBibRecord(**test_data)
+    recs.nonbib_records.extend([rec._data])
     print 'sending nonbib data for bibocde', test_data['bibcode'], 'to master pipeline'
     print 'using CELERY_BROKER', config['CELERY_BROKER']
     print '  CELERY_DEFAULT_EXCHANGE', config['CELERY_DEFAULT_EXCHANGE']
@@ -130,7 +182,7 @@ def diagnose():
     print '  OUTPUT_TASKNAME', config['OUTPUT_TASKNAME']
     print 'this action did not use ingest database (configured at', config['INGEST_DATABASE'], ')'
     print '  or the metrics database (at', config['METRICS_DATABASE'], ')'
-    task_output_results.delay(rec)
+    task_output_results.delay(recs)
 
     
 def main():
@@ -140,6 +192,8 @@ def main():
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
+    parser.add_argument('-s', '--batchSize', default=1, 
+                        help='used when queuing data')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
     parser.add_argument('command', default='help', 
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
@@ -302,14 +356,14 @@ def main():
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
         diagnose()
     elif args.command == 'nonbibToMasterPipeline':
-        nonbib_to_master_pipeline(args.rowViewSchemaName)
+        nonbib_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
         print 'diagnose = ', args.diagnose
-        nonbib_delta_to_master_pipeline(args.rowViewSchemaName)
+        nonbib_delta_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline':
-        metrics_to_master_pipeline(args.metricsSchemaName)
+        metrics_to_master_pipeline(args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
-        nonbib_delta_to_master_pipeline(args.metricsSchemaName, args.rowViewSchemaName)
+        nonbib_delta_to_master_pipeline(args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
 
     else:
         print 'app.py: illegal command or missing argument, command = ', args.command

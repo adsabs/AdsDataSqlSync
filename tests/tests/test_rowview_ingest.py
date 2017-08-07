@@ -10,8 +10,8 @@ class test_rowview_ingest(unittest.TestCase):
     def setUp(self):
         self.config = {}
         self.config.update(load_config())
-        if self.config['MAX_ROWS'] != -1:
-            self.assertTrue(False, 'tests fail when local_config.py sets MAX_ROWS')
+        self.assertEqual(-1, self.config['MAX_ROWS'], 'tests fail when local_config.py sets MAX_ROWS')
+
 
     def test_bibcode_reader(self):
         """verify bibcode reader adds id to every line"""
