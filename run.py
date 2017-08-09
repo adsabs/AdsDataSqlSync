@@ -160,7 +160,7 @@ def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema, batch_size=1
 
 
 
-def diagnose():
+def diagnose_nonbib():
     """send hard coded nonbib data the master pipeline
 
     useful for testing to verify connectivity"""
@@ -183,6 +183,35 @@ def diagnose():
     print 'this action did not use ingest database (configured at', config['INGEST_DATABASE'], ')'
     print '  or the metrics database (at', config['METRICS_DATABASE'], ')'
     task_output_results.delay(recs)
+
+
+def diagnose_metrics():
+    """send hard coded metrics data the master pipeline
+
+    useful for testing to verify connectivity"""
+
+    test_data = {'bibcode': '2003ASPC..295..361M', 'refereed':False, 'rn_citations': 0, 
+                 'rn_citation_data': [], 
+                 'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
+                 'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5], 
+                 'an_citations': 0, 'refereed_citation_num': 0,
+                 'citation_num': 0, 'reference_num': 0, 'citations': [], 'refereed_citations': [], 
+                 'author_num': 2, 'an_refereed_citations': 0
+                 }
+    recs = MetricsRecordList()
+    rec = MetricsRecord(**test_data)
+    recs.metrics_records.extend([rec._data])
+    print 'sending metrics data for bibocde', test_data['bibcode'], 'to master pipeline'
+    print 'using CELERY_BROKER', config['CELERY_BROKER']
+    print '  CELERY_DEFAULT_EXCHANGE', config['CELERY_DEFAULT_EXCHANGE']
+    print '  CELERY_DEFAULT_EXCHANGE_TYPE', config['CELERY_DEFAULT_EXCHANGE_TYPE']
+    print '  OUTPUT_CELERY_BROKER', config['OUTPUT_CELERY_BROKER']
+    print '  OUTPUT_TASKNAME', config['OUTPUT_TASKNAME']
+    print 'this action did not use ingest database (configured at', config['INGEST_DATABASE'], ')'
+    print '  or the metrics database (at', config['METRICS_DATABASE'], ')'
+    task_output_metrics.delay(recs)
+
+
 
     
 def main():
@@ -354,12 +383,14 @@ def main():
         m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
         m.update_metrics_changed(args.rowViewSchemaName)
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
-        diagnose()
+        diagnose_nonbib()
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
         print 'diagnose = ', args.diagnose
         nonbib_delta_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
+    elif args.command == 'metricsToMasterPipeline' and args.diagnose:
+        diagnose_metrics()
     elif args.command == 'metricsToMasterPipeline':
         metrics_to_master_pipeline(args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
