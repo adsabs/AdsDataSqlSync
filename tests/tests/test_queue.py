@@ -13,7 +13,7 @@ class test_queue(unittest.TestCase):
         """verify queue function is called the correct number of times"""
         
         # one bibcode per line
-        f = 'tests/tests/bibcodesTestSample.txt' 
+        f = 'tests/data/bibcodesTestSample.txt' 
         bibcode_count = sum(1 for line in open(f))
         # batches of 100 records are queued together
         # compute how many batches should be queued
