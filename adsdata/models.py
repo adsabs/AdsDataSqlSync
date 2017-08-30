@@ -132,7 +132,7 @@ class MetricsTable(Base):
     downloads = Column(postgresql.ARRAY(Integer))
     reads = Column(postgresql.ARRAY(Integer))
     an_citations = Column(postgresql.REAL)
-    refereed_citations_num = Column(Integer)
+    refereed_citation_num = Column(Integer)
     citation_num = Column(Integer)
     reference_num = Column(Integer)
     citations = Column(postgresql.ARRAY(String))

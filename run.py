@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from adsdata import nonbib
 from adsdata import metrics
 from adsdata import reader
+from adsdata import models
 from adsputils import load_config, setup_logging
 from adsmsg import NonBibRecord, NonBibRecordList, MetricsRecord, MetricsRecordList
 from adsdata.tasks import task_output_results, task_output_metrics
@@ -45,17 +46,32 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     sql_sync.create_joined_rows(nonbib_db_conn)
 
 
-def nonbib_to_master_pipeline(schema, batch_size=1):
+def row2dict(row):
+    """ from https://stackoverflow.com/questions/1958219/convert-sqlalchemy-row-object-to-python-dict"""
+    d = {}
+    for column in row.__table__.columns:
+        d[column.name] = getattr(row, column.name)
+    return d
+
+
+def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     """send all nonbib data to queue for delivery to master pipeline"""
-    nonbib = nonbib.NonBib(schema)
-    connection = nonbib.engine.connect()
-    s = select([nonbib.table])
-    results = connection.execute(s)
+    global config
+    Session = sessionmaker(bind=nonbib_engine)
+    session = Session()
+    session.execute('set search_path to {}'.format(schema))
+    query = session.query(models.NonBibTable)
+    results = query.all()
     tmp = []
+    i = 0
+    max_rows = config['MAX_ROWS']
     for current_row in results:
-        current_row = dict(current_row)
+        current_row = row2dict(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
+        i += 1
+        if i > max_rows:
+            break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
             recs.nonbib_records.extend(tmp)
@@ -71,21 +87,27 @@ def nonbib_to_master_pipeline(schema, batch_size=1):
 
 
 
-def nonbib_delta_to_master_pipeline(schema, batch_size=1):
+def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     """send data for changed bibcodes to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
     perhaps ingested on succesive days"""
-    nonbib = nonbib.NonBib(schema)
-    connection = nonbib.engine.connect()
-    delta_table = nonbib.get_delta_table()
-    s = select([delta_table])
-    results = connection.execute(s)
+    global config
+    Session = sessionmaker(bind=nonbib_engine)
+    session = Session()
+    session.execute('set search_path to {}'.format(schema))
+    query = session.query(models.NonBibTable)
+    results = query.all()
     tmp = []
-    for current_delta in results:
+    i = 0
+    max_rows = config['MAX_ROWS']
+    for current_row in results:
         row = nonbib.get_row_view(current_delta['bibcode'])
-        rec = NonBibRecord(**dict(row))
+        rec = NonBibRecord(row2dict(row))
         tmp.append(rec._data)
+        i += 1
+        if i > max_rows:
+            break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
             recs.nonbib_records.extend(tmp)
@@ -100,19 +122,26 @@ def nonbib_delta_to_master_pipeline(schema, batch_size=1):
         task_output_results.delay(recs)
 
 
-def metrics_to_master_pipeline(schema, batch_size=1):
+def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
     """send all metrics data to queue for delivery to master pipeline"""
-    m = metrics.Metrics(schema)
-    connection = m.engine.connect()
-    s = select([m.table])
-    results = connection.execute(s)
+    global config
+    Session = sessionmaker(bind=metrics_engine)
+    session = Session()
+    session.execute('set search_path to {}'.format(schema))
+    query = session.query(models.MetricsTable)
+    results = query.all()
     tmp = []
+    i = 0
+    max_rows = config['MAX_ROWS']
     for current_row in results:
-        current_row = dict(current_row)
+        current_row = row2dict(current_row)
         current_row.pop('id')
         logger.debug('Will forward this metrics record: %s', current_row)
         rec = MetricsRecord(**current_row)
         tmp.append(rec._data)
+        i += 1
+        if i > max_rows:
+            break
         if len(tmp) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
@@ -127,8 +156,7 @@ def metrics_to_master_pipeline(schema, batch_size=1):
         task_output_metrics.delay(recs)
 
 
-
-def metrics_delta_to_master_pipeline(metrics_schema, nonbib_schema, batch_size=1):
+def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_schema, batch_size=1):
     """send data for changed metrics to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
@@ -221,7 +249,7 @@ def main():
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
-    parser.add_argument('-s', '--batchSize', default=1, 
+    parser.add_argument('-s', '--batchSize', default=10, 
                         help='used when queuing data')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
     parser.add_argument('command', default='help', nargs='?',
@@ -359,16 +387,16 @@ def main():
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
         diagnose_nonbib()
     elif args.command == 'nonbibToMasterPipeline':
-        nonbib_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
         print 'diagnose = ', args.diagnose
-        nonbib_delta_to_master_pipeline(args.rowViewSchemaName, int(args.batchSize))
+        nonbib_delta_to_master_pipeline(nonbib_eb_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
     elif args.command == 'metricsToMasterPipeline':
-        metrics_to_master_pipeline(args.metricsSchemaName, int(args.batchSize))
+        metrics_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
-        nonbib_delta_to_master_pipeline(args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
+        nonbib_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
 
     else:
         print 'app.py: illegal command or missing argument, command = ', args.command
