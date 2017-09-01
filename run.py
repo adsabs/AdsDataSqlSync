@@ -68,19 +68,19 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
-        if i >= max_rows:
+        if if max_rows > 0 and i >= max_rows:
             break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
             recs.nonbib_records.extend(tmp)
             tmp = []
-            logger.info("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
+            logger.info("Calling 'app.forward_message' count = '%s'", i))
             task_output_results.delay(recs)
 
     if len(tmp) > 0:
         recs = NonBibRecordList()
         recs.nonbib_records.extend(tmp)
-        logger.info("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
+        logger.info("Calling 'app.forward_message' with count = '%s'", i)
         task_output_results.delay(recs)
     session.close()
 
@@ -102,7 +102,7 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
         rec = NonBibRecord(row2dict(row))
         tmp.append(rec._data)
         i += 1
-        if i > max_rows:
+        if max_rows > 0 and i > max_rows:
             break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
@@ -133,19 +133,19 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
         rec = MetricsRecord(**current_row)
         tmp.append(rec._data)
         i += 1
-        if i > max_rows:
+        if max_rows > 0 and i > max_rows:
             break
         if len(tmp) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
-            logger.info("Calling metrics 'app.forward_message' with '%s' records", len(recs.metrics_records))
+            logger.info("Calling metrics 'app.forward_message' count = '%s'", i)
             task_output_metrics.delay(recs)
             tmp = []
 
     if len(tmp) > 0:
         recs = MetricsRecordList()
         recs.metrics_records.extend(tmp)
-        logger.debug("Calling metrics 'app.forward_message' with final '%s' records", len(recs.metrics_records))
+        logger.debug("Calling metrics 'app.forward_message' with count = '%s'", i)
         task_output_metrics.delay(recs)
 
 
