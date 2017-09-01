@@ -36,6 +36,10 @@ class NonBibTable(Base):
     reads = Column(ARRAY(String))
     reference = Column(ARRAY(String))
 
+class NonBibDeltaTable(Base):
+    __tablename__ = 'changedrowsmm'
+    bibcode = Column(String, primary_key=True)
+    id = Column(Integer)
 
 class CanonicalTable(Base):
     __tablename__ = 'canonical'

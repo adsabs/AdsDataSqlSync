@@ -174,35 +174,17 @@ class Metrics():
         Session = sessionmaker(bind=nonbib_conn)
         session = Session()
         session.execute('set search_path to {}'.format(row_view_schema))
-        while True:
-            query = session.query(models.NonBibTable).filter(
-                and_(
-                    models.NonBibTable.id >= offset,
-                    models.NonBibTable.id < offset + step_size))
-            #s = s.where(sql_sync.table.c.id >= offset).where(sql_sync.table.c.id < offset + step_size)
-            results = query.all()
-            for row_view_current in results:
-                metrics_dict = self.row_view_to_metrics(row_view_current, nonbib_conn, row_view_schema)
-                self.save(db_conn, metrics_dict)
-                count += 1
-                if max_rows > 0 and count > max_rows:
-                    break
-                if count % 1000 == 0:
-                    self.logger.debug('metrics.py, metrics count = {}'.format(count))
-                if end_offset > 0 and end_offset <= (count + start_offset):
-                    # here if we processed the last requested row
-                    self.flush(db_conn)
-                    end_time = time.time()
-                    return
+        for current_row in session.query(models.NonBibTable).yield_per(100):
+            metrics_dict = self.row_view_to_metrics(current_row, nonbib_conn, row_view_schema)
+            self.save(db_conn, metrics_dict)
+            count += 1
+            if max_rows > 0 and count > max_rows:
+                break
+            if count % 1000 == 0:
+                self.logger.debug('metrics.py, metrics count = {}'.format(count))
+        self.flush(db_conn)
+        end_time = time.time()
 
-            #if results.rowcount < step_size:
-            if len(results) < step_size:
-                # here if last read got the last block of data and we're done processing it
-                self.flush(db_conn)
-                end_time = time.time()
-                return;
-
-            offset += step_size
 
     # normalized citations:
     #  for a list of N papers (the citations?)

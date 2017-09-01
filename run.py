@@ -60,31 +60,29 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     Session = sessionmaker(bind=nonbib_engine)
     session = Session()
     session.execute('set search_path to {}'.format(schema))
-    query = session.query(models.NonBibTable)
-    results = query.all()
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    for current_row in results:
+    for current_row in session.query(models.NonBibTable).yield_per(100):
         current_row = row2dict(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
-        if i > max_rows:
+        if i >= max_rows:
             break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
             recs.nonbib_records.extend(tmp)
             tmp = []
-            logger.debug("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
+            logger.info("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
             task_output_results.delay(recs)
 
     if len(tmp) > 0:
         recs = NonBibRecordList()
         recs.nonbib_records.extend(tmp)
-        logger.debug("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
+        logger.info("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
         task_output_results.delay(recs)
-
+    session.close()
 
 
 def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
@@ -96,13 +94,11 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     Session = sessionmaker(bind=nonbib_engine)
     session = Session()
     session.execute('set search_path to {}'.format(schema))
-    query = session.query(models.NonBibTable)
-    results = query.all()
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    for current_row in results:
-        row = nonbib.get_row_view(current_delta['bibcode'])
+    for current_delta in session.query(models.DeltaTable).yield_per(100):
+        row = nonbib.get_row_view(current_delta.bibcode)
         rec = NonBibRecord(row2dict(row))
         tmp.append(rec._data)
         i += 1
@@ -128,15 +124,12 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
     Session = sessionmaker(bind=metrics_engine)
     session = Session()
     session.execute('set search_path to {}'.format(schema))
-    query = session.query(models.MetricsTable)
-    results = query.all()
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    for current_row in results:
+    for current_row in session.query(models.MetricsTable).yield_per(100):
         current_row = row2dict(current_row)
         current_row.pop('id')
-        logger.debug('Will forward this metrics record: %s', current_row)
         rec = MetricsRecord(**current_row)
         tmp.append(rec._data)
         i += 1
@@ -145,7 +138,7 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
         if len(tmp) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
-            logger.debug("Calling metrics 'app.forward_message' with '%s' records", len(recs.metrics_records))
+            logger.info("Calling metrics 'app.forward_message' with '%s' records", len(recs.metrics_records))
             task_output_metrics.delay(recs)
             tmp = []
 
@@ -164,14 +157,12 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_sche
     m = metrics.Metrics(metrics_schema)
     nonbib = nonbib.NonBib(nonbib_schema)
     connection = nonbib.engine.connect()
-    delta_table = nonbib.get_delta_table()
-    s = select([delta_table])
-    results = connection.execute(s)
     tmp = []
-    for current_delta in results:
-        row = m.read(current_delta['bibcode'])
-        row.pop('id')
-        rec = MetricsRecord(**dict(row))
+    for current_delta in session.query(models.DeltaTable).yield_per(100):
+        row = m.read(current_delta.bibcode)
+        rec = NonBibRecord(row2dict(row))
+        rec.pop('id')
+        rec = MetricsRecord(**dict(rec))
         tmp.append(rec._data)
         if len(recs.metrics_records) >= batch_size:
             recs = MetricsRecordList()
@@ -249,7 +240,7 @@ def main():
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
-    parser.add_argument('-s', '--batchSize', default=10, 
+    parser.add_argument('-s', '--batchSize', default=100, 
                         help='used when queuing data')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
     parser.add_argument('command', default='help', nargs='?',
