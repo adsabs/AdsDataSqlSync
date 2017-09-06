@@ -68,13 +68,13 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
-        if if max_rows > 0 and i >= max_rows:
+        if max_rows > 0 and i >= max_rows:
             break
         if len(tmp) >= batch_size:
             recs = NonBibRecordList()
             recs.nonbib_records.extend(tmp)
             tmp = []
-            logger.info("Calling 'app.forward_message' count = '%s'", i))
+            logger.info("Calling 'app.forward_message' count = '%s'", i)
             task_output_results.delay(recs)
 
     if len(tmp) > 0:
