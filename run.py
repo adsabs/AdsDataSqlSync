@@ -268,21 +268,18 @@ def main():
                                    'postgresql://postgres@localhost:5432/postgres')
     metrics_db_engine = create_engine(metrics_connection_string)
     metrics_db_conn = metrics_db_engine.connect()
-
+    sql_sync = nonbib.NonBib(args.rowViewSchemaName)
     if args.command == 'help' and args.diagnose:
         diagnose_nonbib()
         diagnose_metrics()
 
     elif args.command == 'createIngestTables':
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.create_column_tables(nonbib_db_engine)
 
     elif args.command == 'dropIngestTables':
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.drop_column_tables(nonbib_db_engine)
 
     elif args.command == 'createJoinedRows':
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName, config)
         sql_sync.create_joined_rows(nonbib_db_conn)
 
     elif args.command == 'createMetricsTable' and args.metricsSchemaName:
@@ -302,24 +299,19 @@ def main():
         m.update_metrics_changed(args.rowViewSchemaName)
 
     elif args.command == 'renameSchema' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
     elif args.command == 'createDeltaRows' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
     elif args.command == 'createNewBibcodes' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.build_new_bibcodes(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
     elif args.command == 'logDeltaReasons' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
     elif args.command == 'runRowViewPipeline' and args.rowViewSchemaName:
         # drop tables, create tables, load data, create joined view
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.drop_column_tables(nonbib_db_engine)
         sql_sync.create_column_tables(nonbib_db_engine)
         load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
@@ -332,7 +324,6 @@ def main():
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         # read in flat files, compare to staging/baseline
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.drop_column_tables(nonbib_db_engine)
         sql_sync.create_column_tables(nonbib_db_engine)
        
@@ -347,7 +338,6 @@ def main():
 
     elif args.command == 'runPipelines' and args.rowViewSchemaName and args.metricsSchemaName:
         # drop tables, create tables, load data, compute metrics
-        sql_sync = nonbib.NonBib(args.rowViewSchemaNameg)
         sql_sync.drop_column_tables(nonbib_db_engine)
         sql_sync.create_column_tables(nonbib_db_engine)
         load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
@@ -361,11 +351,9 @@ def main():
         # drop tables, rename schema, create tables, load data, compute delta, compute metrics
         baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
         baseline_sql_sync.drop_column_tables()
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.rename_schema(args.rowViewBaselineSchemaName)
 
         baseline_sql_sync = None
-        sql_sync = nonbib.NonBib(args.rowViewSchemaName)
         sql_sync.create_column_tables(nonbib_db_engine)
        
         load_column_files(config, sql_sync)
