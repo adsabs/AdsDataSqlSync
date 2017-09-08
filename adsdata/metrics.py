@@ -113,9 +113,8 @@ class Metrics():
         
         sql_sync = nonbib.NonBib(row_view_schema)
         query = nonbib_sess.query(models.NonBibTable)
-        results = query.all()
         count = 0
-        for delta_row in results:
+        for delta_row in session.query(models.NonBibDeltaTable).yield_per(100):
             row = sql_sync.get_by_bibcode(nonbib_conn, delta_row.bibcode)
             metrics_dict = self.row_view_to_metrics(row, nonbib_conn, row_view_schema)
             self.save(db_conn, metrics_dict)
