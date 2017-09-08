@@ -155,8 +155,8 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_sche
     the delta table was computed by comparing to sets of nonbib data
     perhaps ingested on succesive days"""
     m = metrics.Metrics(metrics_schema)
-    nonbib = nonbib.NonBib(nonbib_schema)
-    connection = nonbib.engine.connect()
+    n = nonbib.NonBib(nonbib_schema)
+    connection = n.engine.connect()
     tmp = []
     for current_delta in session.query(models.DeltaTable).yield_per(100):
         row = m.read(current_delta.bibcode)
