@@ -98,7 +98,7 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     i = 0
     max_rows = config['MAX_ROWS']
     for current_delta in session.query(models.DeltaTable).yield_per(100):
-        row = nonbib.get_row_view(current_delta.bibcode)
+        row = nonbib.get_by_bibcode(current_delta.bibcode)
         rec = NonBibRecord(row2dict(row))
         tmp.append(rec._data)
         i += 1

@@ -126,7 +126,7 @@ class Metrics():
 
     def update_metrics_bibcode(self, bibcode, nonbib):  #, delta_schema='delta'):
         """changed bibcodes are in sql table, for each we update metrics record"""
-        row = nonbib.get_row_view(bibcode)
+        row = nonbib.get_by_bibcode(bibcode)
         metrics_dict = self.row_view_to_metrics(row, sql_sync)
         self.save(metrics_dict)
 
@@ -135,7 +135,7 @@ class Metrics():
     # paper with 3 citations 2015MNRAS.447.1618S
     def update_metrics_test(self, bibcode, row_view_schema='ingest'):
         sql_sync = nonbib.NonBib(row_view_schema)
-        row_view_bibcode = sql_sync.get_row_view(bibcode)
+        row_view_bibcode = sql_sync.get_by_bibcode(bibcode)
         metrics_dict = self.row_view_to_metrics(row_view_bibcode, sql_sync)
         self.save(metrics_dict)
         self.flush()
