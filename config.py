@@ -3,15 +3,12 @@
 # possible values: WARN, INFO, DEBUG
 LOGGING_LEVEL = 'DEBUG'
 
-DATA_PATH = '/inputDataDir/'
-TEST_DATA_PATH = 'tests/data/'
-
 # where to read column files into
 INGEST_DATABASE = 'postgresql://postgres@localhost:5432/postgres'
 # metrics database used during ingest, not by celery code
 METRICS_DATABASE = INGEST_DATABASE
 
-
+DATA_PATH = '/inputDataDir/'
 # filenames for column files
 AUTHOR = 'config/links/facet_authors/all.links'
 CANONICAL = 'config/bibcodes.list.can'
@@ -26,15 +23,12 @@ REFERENCE = 'config/links/reference/all.links'
 RELEVANCE = 'config/links/relevance/docmetrics.tab'
 SIMBAD = 'config/links/simbad/simbad_objects.tab'
 
-
-
-
-
-
 # number of rows of column file to process
 # set to a small number during testing to ingest just a little data quickly
 # -1 means process all rows
 MAX_ROWS = -1
+
+TEST_DATA_PATH = 'tests/data/'
 
 # ================= celery/rabbitmq rules============== #
 # ##################################################### #
