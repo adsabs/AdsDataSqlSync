@@ -101,10 +101,10 @@ class StandardFileReader(ADSClassicInputStream):
 
         # as_array: should values be read in as an array and output to sql as an array
         #  for example, downloads and grants are an array while relevance has several distinct values but isn't an array
-        self.array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad', 'ned')
+        self.array_types = ('download', 'reads', 'author', 'reference', 'grants', 'citation', 'reader', 'simbad', 'ned', 'datalinks')
         # quote_value: should individual values sent to sql be in quotes.  
         #  for example, we don't quote reads, but we do names of authors
-        self.quote_values = ('author','simbad','grants', 'ned')
+        self.quote_values = ('author','simbad','grants', 'ned', 'datalinks')
         # tab_separator: is the tab a separator in the input data, default is comma
         self.tab_separated_values = ('author', 'download', 'reads')
         
@@ -212,7 +212,89 @@ class StandardFileReader(ADSClassicInputStream):
             return_value = '{' + return_value + '}'
         return return_value
 
+# for datalinks table entries that may or may not have a link_sub_type
+# that includes ARTICLE types that do have sub_type and
+# for example PRESENTATION, LIBRARYCATALOG, and INSPIRE	 that do not
+# note that these entries do not have a title
+class DataLinksFileReader(StandardFileReader):
 
-        
-       
-        
+    def __init__(self, file_type_, file_, link_type_, link_sub_type_):
+        super(DataLinksFileReader, self).__init__(file_type_, file_)
+        self.link_type = link_type_
+        self.link_sub_type = link_sub_type_
+
+    def process_line(self, bibcode, value):
+        as_array = self.file_type in self.array_types
+        quote_value = self.file_type in self.quote_values
+        tab_separator = self.file_type in self.tab_separated_values
+        processed_url = self.process_value(value, as_array, quote_value, tab_separator)
+        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, self.link_sub_type, processed_url, "{""}")
+        return row
+
+# for datalinks table entries that have titles, but no link_sub_type
+# right now only link_type = ASSOCIATED belongs to this category
+class DataLinksWithTitleFileReader(StandardFileReader):
+
+    def __init__(self, file_type_, file_, link_type_):
+        super(DataLinksWithTitleFileReader, self).__init__(file_type_, file_)
+        self.link_type = link_type_
+
+    def split(self, value):
+        # value is a list of strings with two fields,
+        # find the first space and split on that
+        # create two lists of url and titles and return them
+        urlList = []
+        titleList = []
+        for v in value:
+            [url, title] = v.split(' ', 1)
+            urlList.append(url)
+            titleList.append(title)
+        return urlList, titleList
+
+    def process_line(self, bibcode, value):
+        as_array = self.file_type in self.array_types
+        quote_value = self.file_type in self.quote_values
+        tab_separator = self.file_type in self.tab_separated_values
+        [urlList, titleList] = self.split(value)
+        processed_url = self.process_value(urlList, as_array, quote_value, tab_separator)
+        processed_title = self.process_value(titleList, as_array, quote_value, tab_separator)
+        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, "", processed_url, processed_title)
+        return row
+
+# for datalinks table entries that have may or may not have title but they do have link_sub_type
+# that we are calling target, right now only link_type = DATA belongs to this category
+class DataLinksWithTargetFileReader(StandardFileReader):
+
+    def __init__(self, file_type_, file_, link_type_):
+        super(DataLinksWithTargetFileReader, self).__init__(file_type_, file_)
+        self.link_type = link_type_
+
+    def split(self, value):
+        # SIMBAD	1	http://$SIMBAD$/simbo.pl?bibcode=1907ApJ....25...59C	SIMBAD Objects (1)
+        # value is a list of strings with four elements,
+        # split on tab, the second item is not useful for us at this time
+        # create 3 lists and return them
+        urlList = []
+        titleList = []
+        targetList = []
+        for v in value:
+            [target, notUsed, url, title] = v.split('\t')
+            urlList.append(url)
+            titleList.append(title)
+            targetList.append(target)
+        return urlList, titleList, targetList
+
+    def process_line(self, bibcode, value):
+        as_array = self.file_type in self.array_types
+        quote_value = self.file_type in self.quote_values
+        tab_separator = self.file_type in self.tab_separated_values
+        [urlList, titleList, targetList] = self.split(value)
+        processed_url = self.process_value(urlList, as_array, quote_value, tab_separator)
+        # if no title
+        if (len(''.join(titleList)) > 0):
+            processed_title = self.process_value(titleList, as_array, quote_value, tab_separator)
+        else:
+            processed_title = '{}'
+        processed_target = ''.join(targetList)
+        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, processed_target, processed_url, processed_title)
+        return row
