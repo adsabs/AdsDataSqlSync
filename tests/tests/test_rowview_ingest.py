@@ -183,7 +183,97 @@ class test_rowview_ingest(unittest.TestCase):
         self.assertEqual(bibcode_count, lines_in_file-1, 'bad bibcode in file not skipped')
 
 
+    # test entries with target (sub_type) and no title
+    def test_eprint_reader(self):
+        """verify reference reader creates the correct sql array value"""
+
+        spot_checks = (('1825AN......4..241B', 'ARTICLE', 'EPRINT_HTML', '{"http://arxiv.org/abs/0908.1823"}', '{}'),
+                       ('1912NCim....3...93P', 'ARTICLE', 'EPRINT_HTML', '{"http://arxiv.org/abs/1002.1810"}', '{}')
+                       )
+        self.datalinks_reader_test('datalinks', spot_checks, 'EPRINT_HTML')
+
+
+    # test entries with no target
+    def test_presentation_reader(self):
+        """verify reference reader creates the correct sql array value"""
+
+        spot_checks = (
+        ('1997kbls.confE..10C', 'PRESENTATION', '', '{"http://online.kitp.ucsb.edu/online/bblunch/carroll/"}', '{}'),
+        ('1997kpls.confE...3K', 'PRESENTATION', '', '{"http://online.kitp.ucsb.edu/online/plecture/kirshner/"}', '{}')
+        )
+        self.datalinks_reader_test('datalinks', spot_checks, 'PRESENTATION')
+
+
+    # test entries with multiple url,title pairs, and no target
+    def test_associated_reader(self):
+        """verify reference reader creates the correct sql array value"""
+
+        spot_checks = (('1825AN......4..241B', 'ASSOCIATED', '', '{"1825AN......4..241B","2010AN....331..852K"}',
+                        '{"Main Paper","Translation"}'),
+                       ('1841AN.....18..129A', 'ASSOCIATED', '', '{"1841AN.....18..129A","1841AN.....18Q.113A"}',
+                        '{"Part  2","Part  1"}')
+                       )
+        self.datalinks_reader_test('datalinks', spot_checks, 'ASSOCIATED')
+
+
+    # test entries with url,title pairs and target
+    def test_data_collection_reader(self):
+        """verify reference reader creates the correct sql array value"""
+
+        spot_checks = (('1782oaft.book..209D', 'DATA', 'ARI', '{"http://dc.g-vo.org/arigfh/katkat/byhdw/qp/1202"}', '{}'),
+                       ('1857AN.....45...89S', 'DATA', 'SIMBAD', '{"http://$SIMBAD$/simbo.pl?bibcode=1857AN.....45...89S"}',
+                        '{"SIMBAD Objects (1)"}')
+                       )
+        self.datalinks_reader_test('datalinks', spot_checks, 'DATA')
+
+
+    def datalinks_reader_test(self, file_type, spot_checks, datalinks_file_type='', data_dir='data1/'):
+        """verify standard reader creates the correct sql value
+
+        spot_checks is a list of (bibcode, value) pairs to verify.
+        spot_checks might include first and last bibcodes in file
+        and other interesting or edge cases.
+        """
+        allfiles = self.config[file_type.upper()]
+        for onefile in allfiles:
+            if (onefile.split(',')[onefile.count(',')] == datalinks_file_type):
+                filename = self.config['TEST_DATA_PATH'] + data_dir + onefile.split(',')[0]
+                if onefile.count(',') == 2:
+                    datalinks_file_type_main = onefile.split(',')[1]
+                    datalinks_file_type_sub = datalinks_file_type
+                else:
+                    datalinks_file_type_main = datalinks_file_type
+                    datalinks_file_type_sub = ''
+                break
+        if datalinks_file_type_main == 'ASSOCIATED':
+            r = reader.DataLinksWithTitleFileReader(file_type, filename, datalinks_file_type_main)
+        elif datalinks_file_type_main == 'DATA':
+            r = reader.DataLinksWithTargetFileReader(file_type, filename, datalinks_file_type_main)
+        else:
+            r = reader.DataLinksFileReader(file_type, filename, datalinks_file_type_main, datalinks_file_type_sub)
+        bibcode_count = 0
+        line = r.read()
+        spot_checks_found = []
+        while line:
+            bibcode_count += 1
+            parts = line.split('\t')
+            bibcode = parts[0].strip()
+            # we spot check a couple fields
+            for spot_check in spot_checks:
+                spot_bibcode = spot_check[0]
+                if bibcode == spot_bibcode:
+                    spot_checks_found.append(spot_bibcode)
+                    for i in xrange(1, len(spot_check)):
+                        spot_value = spot_check[i]
+                        value = parts[i].strip()
+                        self.assertEqual(spot_value, value,
+                                         'bad {} value for bibcode {}, expected {}, received {}'.format(file_type, bibcode,
+                                                                                                        spot_value, value))
+            line = r.read()
+        r.close()
+        self.assertEqual(len(spot_checks), len(spot_checks_found), 'for {} did not find all spot checks'.format(file_type))
+
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)        
-        
+    unittest.main(verbosity=2)
+

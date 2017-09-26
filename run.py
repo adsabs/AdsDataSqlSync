@@ -30,20 +30,50 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     for t in nonbib.NonBib.all_types:
         table_name = sql_sync.schema + '.' + t
         logger.info('processing {}'.format(table_name))
-        filename = config['DATA_PATH'] + config[t.upper()]
-        if t == 'canonical':
-            r = reader.BibcodeFileReader(filename)
-        elif t == 'refereed':
-            r = reader.RefereedFileReader(filename) 
+        # here we have to read multiple files, information in config file are in a list
+        if t == 'datalinks':
+            load_column_files_datalinks_table(config[t.upper()], table_name, t, raw_conn, cur)
         else:
-            r = reader.StandardFileReader(t, filename)
-        if r:
-            cur.copy_from(r, table_name)
-            raw_conn.commit()
+            filename = config['DATA_PATH'] + config[t.upper()]
+            if t == 'canonical':
+                r = reader.BibcodeFileReader(filename)
+            elif t == 'refereed':
+                r = reader.RefereedFileReader(filename)
+            else:
+                r = reader.StandardFileReader(t, filename)
+            if r:
+                cur.copy_from(r, table_name)
+                raw_conn.commit()
 
     cur.close()
     raw_conn.close()
     sql_sync.create_joined_rows(nonbib_db_conn)
+
+
+def load_column_files_datalinks_table(from_config, table_name, file_type, raw_conn, cur):
+
+    # from_config is a list of lines that could have one the following two formats
+    # path,link_type,link_sub_type (i.e., config/links/eprint_html/all.links,ARTICLE,EPRINT_HTML) or
+    # path,link_type (i.e., config/links/video/all.links,PRESENTATION)
+    for oneLinkType in from_config:
+        if (oneLinkType.count(',') == 1):
+            [filename, linktype] = oneLinkType.split(',')
+            linksubtype = ''
+        elif (oneLinkType.count(',') == 2):
+            [filename, linktype, linksubtype] = oneLinkType.split(',')
+        else:
+            return
+
+        if linktype == 'ASSOCIATED':
+            r = reader.DataLinksWithTitleFileReader(file_type, config['DATA_PATH'] + filename, linktype)
+        elif linktype == 'DATA':
+            r = reader.DataLinksWithTargetFileReader(file_type, config['DATA_PATH'] + filename, linktype)
+        else:
+            r = reader.DataLinksFileReader(file_type, config['DATA_PATH'] + filename, linktype, linksubtype)
+
+        if r:
+            cur.copy_from(r, table_name)
+            raw_conn.commit()
 
 
 def row2dict(row):

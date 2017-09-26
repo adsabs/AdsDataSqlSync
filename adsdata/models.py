@@ -119,9 +119,17 @@ class ChangedTable(Base):
     __tablename__ = 'changedrows'
     bibcode = Column(String, primary_key=True)
 
+class DataLinksTable(Base):
+    __tablename__ = 'datalinks'
+    bibcode = Column(String, primary_key=True)
+    link_type = Column(String, primary_key=True)
+    link_sub_type = Column(String, primary_key=True)
+    url = Column(ARRAY(String))
+    title = Column(ARRAY(String))
+
 column_tables = (CanonicalTable, AuthorTable, RefereedTable, SimbadTable, NedTable,
                  GrantsTable, CitationTable, RelevanceTable, ReaderTable, DownloadTable, ReadsTable, ReferenceTable,
-                 ChangedTable)
+                 ChangedTable, DataLinksTable)
 
 
 class MetricsTable(Base):

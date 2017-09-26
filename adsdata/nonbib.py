@@ -28,7 +28,7 @@ class NonBib:
     """
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
-                  'reader', 'download', 'reference', 'reads', 'ned')
+                  'reader', 'download', 'reference', 'reads', 'ned', 'datalinks')
 
     def __init__(self, schema_='nonbib'):
         self.schema = schema_
