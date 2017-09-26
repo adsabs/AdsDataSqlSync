@@ -52,27 +52,28 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
 
 def load_column_files_datalinks_table(from_config, table_name, file_type, raw_conn, cur):
 
-    # from_config could be
+    # from_config is a list of lines that could have one the following two formats
     # path,link_type,link_sub_type (i.e., config/links/eprint_html/all.links,ARTICLE,EPRINT_HTML) or
     # path,link_type (i.e., config/links/video/all.links,PRESENTATION)
-    if (from_config.count(',') == 1):
-        [filename, linktype] = from_config.split(',')
-        linksubtype = ''
-    elif (from_config.count(',') == 2):
-        [filename, linktype, linksubtype] = from_config.split(',')
-    else:
-        return
+    for oneLinkType in from_config:
+        if (oneLinkType.count(',') == 1):
+            [filename, linktype] = oneLinkType.split(',')
+            linksubtype = ''
+        elif (oneLinkType.count(',') == 2):
+            [filename, linktype, linksubtype] = oneLinkType.split(',')
+        else:
+            return
 
-    if linktype == 'ASSOCIATED':
-        r = reader.DataLinksWithTitleFileReader(file_type, config['DATA_PATH'] + filename, linktype)
-    elif linktype == 'DATA':
-        r = reader.DataLinksWithTargetFileReader(file_type, config['DATA_PATH'] + filename, linktype)
-    else:
-        r = reader.DataLinksFileReader(file_type, config['DATA_PATH'] + filename, linktype, linksubtype)
+        if linktype == 'ASSOCIATED':
+            r = reader.DataLinksWithTitleFileReader(file_type, config['DATA_PATH'] + filename, linktype)
+        elif linktype == 'DATA':
+            r = reader.DataLinksWithTargetFileReader(file_type, config['DATA_PATH'] + filename, linktype)
+        else:
+            r = reader.DataLinksFileReader(file_type, config['DATA_PATH'] + filename, linktype, linksubtype)
 
-    if r:
-        cur.copy_from(r, table_name)
-        raw_conn.commit()
+        if r:
+            cur.copy_from(r, table_name)
+            raw_conn.commit()
 
 
 def row2dict(row):

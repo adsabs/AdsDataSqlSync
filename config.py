@@ -4,7 +4,7 @@
 LOGGING_LEVEL = 'DEBUG'
 
 # where to read column files into
-INGEST_DATABASE = 'postgresql://postgres:postgres@localhost:5432/postgres'
+INGEST_DATABASE = 'postgresql://postgres:postgres@localhost:5432/data_pipeline'
 # metrics database used during ingest, not by celery code
 METRICS_DATABASE = INGEST_DATABASE
 
