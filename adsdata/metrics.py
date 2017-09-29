@@ -221,7 +221,9 @@ class Metrics():
         citations_histogram = defaultdict(float)
         total_normalized_citations = 0.0
         if citations:
-            q = 'select refereed,array_length(reference,1),bibcode from ' + row_view_schema + '.RowViewM where bibcode in (select unnest(citations) from ' + row_view_schema + '.RowViewM where bibcode=%s);'
+            q = 'select refereed,array_length(reference,1),bibcode from ' + row_view_schema + \
+                '.RowViewM where bibcode in (select unnest(citations) from ' + row_view_schema + \
+                '.RowViewM where bibcode=%s);'
             result = nonbib_db_conn.execute(q,bibcode)
             for row in result:
                 citation_refereed = row[0] if row[0] else False

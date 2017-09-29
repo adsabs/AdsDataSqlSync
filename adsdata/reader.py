@@ -191,16 +191,18 @@ class StandardFileReader(ADSClassicInputStream):
                     return_value += output_separator + v
                 
         elif isinstance(value, list):
-            # array of values to conver to sql 
+            # array of values to conver to sql
             for v in value:
                 v = v.replace('\t', ' ')
-                if quote_value and v[0] != '"':
+                if quote_value and ((len(v) > 0 and v[0] != '"') or (len(v) == 0)):
                     v = '"' + v + '"'
+                elif not quote_value and len(v) == 0:
+                    v = 0
                 if len(return_value) == 0:
                     return_value = v 
                 else:
                     return_value += output_separator + v
-    
+
         elif isinstance(value, str):
             if quote_value and value[0] != '"':
                 return_value = '"' + value + '"'
@@ -227,8 +229,9 @@ class DataLinksFileReader(StandardFileReader):
         as_array = self.file_type in self.array_types
         quote_value = self.file_type in self.quote_values
         tab_separator = self.file_type in self.tab_separated_values
+        value = [v.replace('"', '').replace('\r', '') for v in value]
         processed_url = self.process_value(value, as_array, quote_value, tab_separator)
-        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, self.link_sub_type, processed_url, "{""}")
+        row = '{}\t{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, self.link_sub_type, processed_url, "{""}", 0)
         return row
 
 # for datalinks table entries that have titles, but no link_sub_type
@@ -243,23 +246,24 @@ class DataLinksWithTitleFileReader(StandardFileReader):
         # value is a list of strings with two fields,
         # find the first space and split on that
         # create two lists of url and titles and return them
-        urlList = []
-        titleList = []
+        url_list = []
+        title_list = []
         for v in value:
             [url, title] = v.split(' ', 1)
-            urlList.append(url)
-            titleList.append(title)
-        return urlList, titleList
+            url_list.append(url.replace('"', ""))
+            title_list.append(title.replace('"', "'"))
+        return url_list, title_list
 
     def process_line(self, bibcode, value):
         as_array = self.file_type in self.array_types
         quote_value = self.file_type in self.quote_values
         tab_separator = self.file_type in self.tab_separated_values
-        [urlList, titleList] = self.split(value)
-        processed_url = self.process_value(urlList, as_array, quote_value, tab_separator)
-        processed_title = self.process_value(titleList, as_array, quote_value, tab_separator)
-        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, "", processed_url, processed_title)
+        [url_list, title_list] = self.split(value)
+        processed_url = self.process_value(url_list, as_array, quote_value, tab_separator)
+        processed_title = self.process_value(title_list, as_array, quote_value, tab_separator)
+        row = '{}\t{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, "NA", processed_url, processed_title, 0)
         return row
+
 
 # for datalinks table entries that have may or may not have title but they do have link_sub_type
 # that we are calling target, right now only link_type = DATA belongs to this category
@@ -269,32 +273,81 @@ class DataLinksWithTargetFileReader(StandardFileReader):
         super(DataLinksWithTargetFileReader, self).__init__(file_type_, file_)
         self.link_type = link_type_
 
+    def _separate(self, line):
+        if (len(line) == 0):
+            return ['','','']
+        parts = line.split('\t', 2)
+        return [parts[0], parts[1], parts[1]+'\t'+parts[2]]
+
+    def _bibcode_linktype_match(self, bibcode, liketype):
+        """ peek ahead to next line for bibcode and check for mactch"""
+        file_location = self._iostream.tell()
+        next_line = self._iostream.readline()
+        self._iostream.seek(file_location)
+        next_bib, next_type, therest = self._separate(next_line)
+        if bibcode == next_bib and liketype == next_type:
+            return True
+        return False
+
+    def read(self, size=-1):
+        """returns the data from the file for the next bibcode
+
+        peeks ahead in file and concatenates data if its bibcode matches
+        makes at least one and potentially multiple readline calls on iostream """
+        self.read_count += 1
+        if self.read_count % 100000 == 0:
+            self.logger.debug('nonbib file ingest, processing {}, count = {}'.format(self.file_type, self.read_count))
+        line = self._iostream.readline()
+        if len(line) == 0 or (self.config['MAX_ROWS'] > 0 and self.read_count > self.config['MAX_ROWS']):
+            self.logger.info('nonbib file ingest, processed {}, contained {} lines'.format(self._file, self.read_count))
+            return ''
+
+        bibcode, linktype, therest = self._separate(line)
+        while ' ' in bibcode or len(bibcode) != 19:
+            self.logger.error('invalid bibcode {} in file {}'.format(bibcode, self._file))
+            line = self._iostream.readline()
+            bibcode, linktype, therest = self._separate(line)
+        value = therest
+
+        # does the next line match the current bibcode?
+        match = self._bibcode_linktype_match(bibcode, linktype)
+
+        if self.file_type in (self.array_types):
+            value = [value]
+        while match:
+            line = self._iostream.readline()
+            bibcode, linktype, therest = self._separate(line)
+            value.append(therest)
+            match = self._bibcode_linktype_match(bibcode, linktype)
+        return self.process_line(bibcode, value)
+
     def split(self, value):
         # SIMBAD	1	http://$SIMBAD$/simbo.pl?bibcode=1907ApJ....25...59C	SIMBAD Objects (1)
         # value is a list of strings with four elements,
-        # split on tab, the second item is not useful for us at this time
-        # create 3 lists and return them
-        urlList = []
-        titleList = []
-        targetList = []
+        # split on tab, create 4 lists and return them
+
+        url_list = []
+        title_list = []
+        target_list = set()
+        count_list = []
+        sum_count = 0
         for v in value:
-            [target, notUsed, url, title] = v.split('\t')
-            urlList.append(url)
-            titleList.append(title)
-            targetList.append(target)
-        return urlList, titleList, targetList
+            [target, count, url, title] = v.split('\t', 3)
+            url_list.append(url.replace('"', ""))
+            title_list.append(title.replace('"', "'").replace('\n', ''))
+            target_list.add(target)
+            sum_count += int(count)
+        count_list.append(str(sum_count))
+        return url_list, title_list, list(target_list), count_list
 
     def process_line(self, bibcode, value):
         as_array = self.file_type in self.array_types
         quote_value = self.file_type in self.quote_values
         tab_separator = self.file_type in self.tab_separated_values
-        [urlList, titleList, targetList] = self.split(value)
-        processed_url = self.process_value(urlList, as_array, quote_value, tab_separator)
-        # if no title
-        if (len(''.join(titleList)) > 0):
-            processed_title = self.process_value(titleList, as_array, quote_value, tab_separator)
-        else:
-            processed_title = '{}'
-        processed_target = ''.join(targetList)
-        row = '{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, processed_target, processed_url, processed_title)
+        [url_list, title_list, target_list, count_list] = self.split(value)
+        processed_url = self.process_value(url_list, as_array, quote_value, tab_separator)
+        processed_title = self.process_value(title_list, as_array, quote_value, tab_separator)
+        processed_target = self.process_value(target_list, False, False, tab_separator)
+        processed_count = self.process_value(count_list, False, False, tab_separator)
+        row = '{}\t{}\t{}\t{}\t{}\t{}\n'.format(bibcode, self.link_type, processed_target, processed_url, processed_title, processed_count)
         return row
