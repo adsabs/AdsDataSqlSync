@@ -146,9 +146,11 @@ def add_data_link(session, current_row):
     current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
 
 
-def remove_non_solr_fields(d):
-    """remove nonbib fields that solr doesn't need from passed dictionary"""
-    remove = ('authors','norm_cites','id')
+def remove_fields(d):
+    """remove nonbib fields in database but not in solr message from the passed dictionary
+
+    some aren't need by solr, others solr obtains from metrics message"""
+    remove = ('authors','citations', 'downloads', 'id','norm_cites', 'reads', 'refereed')
     for k in remove:
         d.pop(k, None)
 
@@ -165,7 +167,7 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     for current_row in session.query(models.NonBibTable).yield_per(100):
         current_row = row2dict(current_row)
         add_data_link(session, current_row)
-        remove_non_solr_fields(current_row)
+        remove_fields(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
@@ -200,7 +202,10 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     max_rows = config['MAX_ROWS']
     for current_delta in session.query(models.DeltaTable).yield_per(100):
         row = nonbib.get_by_bibcode(current_delta.bibcode)
-        rec = NonBibRecord(row2dict(row))
+        row = row2dict(row)
+        add_data_link(session, row)
+        remove_fields(row)
+        rec = NonBibRecord(**row)
         tmp.append(rec._data)
         i += 1
         if max_rows > 0 and i > max_rows:
@@ -291,7 +296,7 @@ def diagnose_nonbib():
                  'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
                  'reference': ['c', 'd'], 
                  'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5]}
-    remove_non_solr_fields(test_data)
+    remove_fields(test_data)
     recs = NonBibRecordList()
     rec = NonBibRecord(**test_data)
     recs.nonbib_records.extend([rec._data])
