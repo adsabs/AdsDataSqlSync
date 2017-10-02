@@ -198,8 +198,8 @@ class test_rowview_ingest(unittest.TestCase):
         """verify reference reader creates the correct sql array value"""
 
         spot_checks = (
-        ('1997kbls.confE..10C', 'PRESENTATION', '', '{"http://online.kitp.ucsb.edu/online/bblunch/carroll/"}', '{}'),
-        ('1997kpls.confE...3K', 'PRESENTATION', '', '{"http://online.kitp.ucsb.edu/online/plecture/kirshner/"}', '{}')
+        ('1997kbls.confE..10C', 'PRESENTATION', 'NA', '{"http://online.kitp.ucsb.edu/online/bblunch/carroll/"}', '{}'),
+        ('1997kpls.confE...3K', 'PRESENTATION', 'NA', '{"http://online.kitp.ucsb.edu/online/plecture/kirshner/"}', '{}')
         )
         self.datalinks_reader_test('datalinks', spot_checks, 'PRESENTATION')
 
@@ -208,9 +208,9 @@ class test_rowview_ingest(unittest.TestCase):
     def test_associated_reader(self):
         """verify reference reader creates the correct sql array value"""
 
-        spot_checks = (('1825AN......4..241B', 'ASSOCIATED', '', '{"1825AN......4..241B","2010AN....331..852K"}',
+        spot_checks = (('1825AN......4..241B', 'ASSOCIATED', 'NA', '{"1825AN......4..241B","2010AN....331..852K"}',
                         '{"Main Paper","Translation"}'),
-                       ('1841AN.....18..129A', 'ASSOCIATED', '', '{"1841AN.....18..129A","1841AN.....18Q.113A"}',
+                       ('1841AN.....18..129A', 'ASSOCIATED', 'NA', '{"1841AN.....18..129A","1841AN.....18Q.113A"}',
                         '{"Part  2","Part  1"}')
                        )
         self.datalinks_reader_test('datalinks', spot_checks, 'ASSOCIATED')
@@ -220,7 +220,7 @@ class test_rowview_ingest(unittest.TestCase):
     def test_data_collection_reader(self):
         """verify reference reader creates the correct sql array value"""
 
-        spot_checks = (('1782oaft.book..209D', 'DATA', 'ARI', '{"http://dc.g-vo.org/arigfh/katkat/byhdw/qp/1202"}', '{}'),
+        spot_checks = (('1782oaft.book..209D', 'DATA', 'ARI', '{"http://dc.g-vo.org/arigfh/katkat/byhdw/qp/1202"}', '{""}'),
                        ('1857AN.....45...89S', 'DATA', 'SIMBAD', '{"http://$SIMBAD$/simbo.pl?bibcode=1857AN.....45...89S"}',
                         '{"SIMBAD Objects (1)"}')
                        )
@@ -243,7 +243,7 @@ class test_rowview_ingest(unittest.TestCase):
                     datalinks_file_type_sub = datalinks_file_type
                 else:
                     datalinks_file_type_main = datalinks_file_type
-                    datalinks_file_type_sub = ''
+                    datalinks_file_type_sub = 'NA'
                 break
         if datalinks_file_type_main == 'ASSOCIATED':
             r = reader.DataLinksWithTitleFileReader(file_type, filename, datalinks_file_type_main)

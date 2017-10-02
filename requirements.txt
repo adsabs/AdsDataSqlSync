@@ -5,3 +5,4 @@ librabbitmq==1.6.1
 psycopg2==2.7.1
 python-Levenshtein==0.12.0
 requests==2.13.0
+testing.postgresql==1.3.0

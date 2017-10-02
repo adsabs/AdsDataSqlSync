@@ -126,6 +126,7 @@ class DataLinksTable(Base):
     link_sub_type = Column(String, primary_key=True)
     url = Column(ARRAY(String))
     title = Column(ARRAY(String))
+    item_count = Column(Integer)
 
 column_tables = (CanonicalTable, AuthorTable, RefereedTable, SimbadTable, NedTable,
                  GrantsTable, CitationTable, RelevanceTable, ReaderTable, DownloadTable, ReadsTable, ReferenceTable,

@@ -58,7 +58,7 @@ def load_column_files_datalinks_table(from_config, table_name, file_type, raw_co
     for oneLinkType in from_config:
         if (oneLinkType.count(',') == 1):
             [filename, linktype] = oneLinkType.split(',')
-            linksubtype = ''
+            linksubtype = 'NA'
         elif (oneLinkType.count(',') == 2):
             [filename, linktype, linksubtype] = oneLinkType.split(',')
         else:
@@ -84,6 +84,75 @@ def row2dict(row):
     return d
 
 
+def fetch_data_link_elements(query_result):
+    elements = []
+    if (query_result[0] != None):
+        for e in query_result[0].split(','):
+            if (e != None):
+                elements.append(e)
+    return elements
+
+
+def fetch_data_link_elements_counts(query_result):
+    elements = []
+    cumulative_count = 0
+    if (query_result[1] != None):
+        for e in query_result[1].split(','):
+            if (e != None):
+                elements.append(e)
+        cumulative_count = query_result[0]
+    return [elements, cumulative_count]
+
+
+def fetch_data_link_record(query_result):
+    # since I want to use this function from the test side,
+    # I was not able to use the elegant function row2dict function
+    columns = ('link_type', 'link_sub_type', 'url', 'title', 'item_count')
+    results = []
+    for row in query_result:
+        fieldList = []
+        for i, field in enumerate(row):
+            toList = []
+            if columns[i] in ('url', 'title'):
+                many = ''.join(field).lstrip('{').rstrip('}').replace('"','').split(',')
+                for one in many:
+                    toList.append(one)
+                fieldList.append(toList)
+            else:
+                fieldList.append(field)
+        results.append(dict(zip(columns, fieldList)))
+    return results
+
+
+def add_data_link(session, current_row):
+    """populate property, esource, data, total_link_counts, and data_links_rows fields"""
+
+    logger.info("Query db to populate property, esource, data, total_link_counts, and data_links_rows fields for bibcode = '%s'", current_row['bibcode'])
+
+    q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['property'] = fetch_data_link_elements(result.fetchone())
+
+    q = config['ESOURCE_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['esource'] = fetch_data_link_elements(result.fetchone())
+
+    q = config['DATA_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['data'],current_row['total_link_counts'] = fetch_data_link_elements_counts(result.fetchone())
+
+    q = config['DATALINKS_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
+
+
+def remove_non_solr_fields(d):
+    """remove nonbib fields that solr doesn't need from passed dictionary"""
+    remove = ('authors','norm_cites','id')
+    for k in remove:
+        d.pop(k, None)
+
+
 def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     """send all nonbib data to queue for delivery to master pipeline"""
     global config
@@ -95,6 +164,8 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     max_rows = config['MAX_ROWS']
     for current_row in session.query(models.NonBibTable).yield_per(100):
         current_row = row2dict(current_row)
+        add_data_link(session, current_row)
+        remove_non_solr_fields(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
@@ -220,6 +291,7 @@ def diagnose_nonbib():
                  'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
                  'reference': ['c', 'd'], 
                  'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5]}
+    remove_non_solr_fields(test_data)
     recs = NonBibRecordList()
     rec = NonBibRecord(**test_data)
     recs.nonbib_records.extend([rec._data])
