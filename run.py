@@ -125,7 +125,9 @@ def fetch_data_link_record(query_result):
 
 
 def add_data_link(session, current_row):
-    """populate property, esource, link_counts, and total_link_counts fields"""
+    """populate property, esource, data, total_link_counts, and data_links_rows fields"""
+
+    logger.info("Query db to populate property, esource, data, total_link_counts, and data_links_rows fields for bibcode = '%s'", current_row['bibcode'])
 
     q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
