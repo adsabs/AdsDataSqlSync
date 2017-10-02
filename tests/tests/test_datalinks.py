@@ -10,7 +10,7 @@ import psycopg2
 import testing.postgresql
 
 from adsputils import load_config
-from run import fetch_data_link_elements, fetch_data_link_elements_counts
+from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record
 
 class test_resolver(unittest.TestCase):
     """tests for generation of resolver"""
@@ -96,6 +96,13 @@ class test_resolver(unittest.TestCase):
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
             self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
+
+    def test_datalinks_query(self):
+        with db_con.cursor() as cur:
+            cur.execute(self.config['DATALINKS_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
+            self.assertEqual(fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [''], 'item_count': 0, 'link_type': 'ARTICLE', 'link_sub_type': 'ADS_PDF'},
+                                                                      {'url': ['1825AN......4..241B', '2010AN....331..852K'], 'title': ['Main Paper', 'Translation'], 'item_count': 0, 'link_type': 'ASSOCIATED', 'link_sub_type': 'NA'},
+                                                                      {'url': [''], 'title': [''], 'item_count': 0, 'link_type': 'INSPIRE', 'link_sub_type': 'NA'}])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -30,6 +30,7 @@ DATALINKS = ['config/links/facet_datasources/datasources.links,DATA',
             'config/links/eprint_pdf/all.links,ARTICLE,EPRINT_PDF',
             'config/links/author_html/all.links,ARTICLE,AUTHOR_HTML',
             'config/links/author_pdf/all.links,ARTICLE,AUTHOR_PDF',
+            'config/links/ads_scan/all.links,ARTICLE,ADS_SCAN',
             'config/links/associated/all.links,ASSOCIATED',
             'config/links/video/all.links,PRESENTATION',
             'config/links/library/all.links,LIBRARYCATALOG',
@@ -63,6 +64,4 @@ OUTPUT_TASKNAME = 'adsmp.tasks.task_update_record'
 PROPERTY_QUERY = "select string_agg(distinct link_type, ',') as property from {db}.datalinks where bibcode = '{bibcode}'"
 ESOURCE_QUERY = "select string_agg(link_sub_type, ',') as eSource from {db}.datalinks where link_type = 'ARTICLE' and bibcode = '{bibcode}'"
 DATA_QUERY = "select count(item_count), string_agg(link_sub_type || ':' || item_count::text, ',') as data from {db}.datalinks where link_type = 'DATA' and bibcode = '{bibcode}'"
-
-
-
+DATALINKS_QUERY = "select link_type, link_sub_type, url, title, item_count from {db}.datalinks where bibcode = '{bibcode}'"

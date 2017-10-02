@@ -9,10 +9,9 @@ CREATE TABLE datalinks(
       );
 
 
-INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'ARTICLE', ' ', ' ', ' ', '0');
-INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'ASSOCIATED', ' ', ' ', ' ', '0');
-INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'INSPIRE', ' ', ' ', ' ', '0');
-INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'INSPIRE', ' ', ' ', ' ', '0');
+INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'ARTICLE', 'ADS_PDF', '{http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B}', '{}', 0);
+INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'ASSOCIATED', 'NA', '{1825AN......4..241B,2010AN....331..852K}', '{"Main Paper",Translation}', 0);
+INSERT INTO public.datalinks VALUES ('2004MNRAS.354L..31M', 'INSPIRE', 'NA', '{}', '{}', '0');
 INSERT INTO public.datalinks VALUES ('1891opvl.book.....N', 'LIBRARYCATALOG', ' ', ' ', ' ', '0');
 INSERT INTO public.datalinks VALUES ('2016Atoms...4...18I', 'ARTICLE', 'EPRINT_HTML', ' ', ' ', '0');
 INSERT INTO public.datalinks VALUES ('2016Atoms...4...18I', 'ARTICLE', 'EPRINT_PDF', ' ', ' ', '0');

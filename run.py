@@ -104,6 +104,26 @@ def fetch_data_link_elements_counts(query_result):
     return [elements, cumulative_count]
 
 
+def fetch_data_link_record(query_result):
+    # since I want to use this function from the test side,
+    # I was not able to use the elegant function row2dict function
+    columns = ('link_type', 'link_sub_type', 'url', 'title', 'item_count')
+    results = []
+    for row in query_result:
+        fieldList = []
+        for i, field in enumerate(row):
+            toList = []
+            if columns[i] in ('url', 'title'):
+                many = ''.join(field).lstrip('{').rstrip('}').replace('"','').split(',')
+                for one in many:
+                    toList.append(one)
+                fieldList.append(toList)
+            else:
+                fieldList.append(field)
+        results.append(dict(zip(columns, fieldList)))
+    return results
+
+
 def add_data_link(session, current_row):
     """populate property, esource, link_counts, and total_link_counts fields"""
 
@@ -118,6 +138,10 @@ def add_data_link(session, current_row):
     q = config['DATA_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['data'],current_row['total_link_counts'] = fetch_data_link_elements_counts(result.fetchone())
+
+    q = config['DATALINKS_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
 
 
 def remove_non_solr_fields(d):
