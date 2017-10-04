@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, Boolean
 from sqlalchemy import Table, bindparam, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, load_only
 from sqlalchemy import create_engine
 from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -194,12 +194,18 @@ class NonBib:
 #        return table
 
 
-    def get_by_bibcode(self, db_conn, bibcode):
-        """read unified nonbib data row for bibcode""" 
+    def get_by_bibcode(self, db_conn, bibcode, load_columns=None):
+        """read unified nonbib data row for bibcode
+
+        last argument is passed to sqlalchemy load_only
+        """ 
         Session = sessionmaker(bind=db_conn)
         session = Session()
         models.NonBibTable.__table__.schema = self.schema
-        first = session.query(models.NonBibTable).filter(models.NonBibTable.bibcode==bibcode).first()
+        q = session.query(models.NonBibTable).filter(models.NonBibTable.bibcode==bibcode)
+        if load_columns:
+            q.options(load_only(*load_columns))
+        first = q.first()
         session.close()
         return first
     
