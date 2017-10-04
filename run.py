@@ -3,7 +3,7 @@ import sys
 import re
 import argparse
 import os
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, load_only
 from sqlalchemy.sql import select
 from sqlalchemy import create_engine
 
@@ -18,6 +18,10 @@ from adsdata.tasks import task_output_results, task_output_metrics
 logger = None
 config = {}
 
+# non-link fields that are sent to master pipeline
+nonbib_to_master_fields = ('bibcode', 'boost', 'citation_count',
+                           'grants', 'ned_objects', 'read_count', 
+                           'readers', 'reference', 'simbad_objects')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
@@ -76,6 +80,14 @@ def load_column_files_datalinks_table(from_config, table_name, file_type, raw_co
             raw_conn.commit()
 
 
+def nonbib_to_master_dict(row):
+    """create dict using only nonbib fields sent to master in protobuf"""
+    d = {}
+    for column in nonbib_to_master_fields:
+        d[column] = getattr(row, column)
+    return d
+
+
 def row2dict(row):
     """ from https://stackoverflow.com/questions/1958219/convert-sqlalchemy-row-object-to-python-dict"""
     d = {}
@@ -127,8 +139,6 @@ def fetch_data_link_record(query_result):
 def add_data_link(session, current_row):
     """populate property, esource, data, total_link_counts, and data_links_rows fields"""
 
-    logger.info("Query db to populate property, esource, data, total_link_counts, and data_links_rows fields for bibcode = '%s'", current_row['bibcode'])
-
     q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['property'] = fetch_data_link_elements(result.fetchone())
@@ -146,13 +156,6 @@ def add_data_link(session, current_row):
     current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
 
 
-def remove_non_solr_fields(d):
-    """remove nonbib fields that solr doesn't need from passed dictionary"""
-    remove = ('authors','norm_cites','id')
-    for k in remove:
-        d.pop(k, None)
-
-
 def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     """send all nonbib data to queue for delivery to master pipeline"""
     global config
@@ -162,10 +165,10 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    for current_row in session.query(models.NonBibTable).yield_per(100):
-        current_row = row2dict(current_row)
+    q = session.query(models.NonBibTable).options(load_only(*nonbib_to_master_fields))
+    for current_row in q.yield_per(100):
+        current_row = nonbib_to_master_dict(current_row)
         add_data_link(session, current_row)
-        remove_non_solr_fields(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
@@ -199,8 +202,10 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     i = 0
     max_rows = config['MAX_ROWS']
     for current_delta in session.query(models.DeltaTable).yield_per(100):
-        row = nonbib.get_by_bibcode(current_delta.bibcode)
-        rec = NonBibRecord(row2dict(row))
+        row = nonbib.get_by_bibcode(current_delta.bibcode, nonbib_to_master_fields)
+        row = nonbib_to_master_dict(row)
+        add_data_link(session, row)
+        rec = NonBibRecord(**row)
         tmp.append(rec._data)
         i += 1
         if max_rows > 0 and i > max_rows:
@@ -285,13 +290,10 @@ def diagnose_nonbib():
 
     useful for testing to verify connectivity"""
 
-    test_data = {'bibcode': '2003ASPC..295..361M', 'id': 6473150, 'authors': ["Mcdonald, S","Buddha, S"],
-                 'refereed': False, 'simbad_objects': [], 'grants': ['g'], 'citations': [], 'boost': 0.11,
+    test_data = {'bibcode': '2003ASPC..295..361M',
+                 'simbad_objects': [], 'grants': ['g'], 'boost': 0.11,
                  'citation_count': 0, 'read_count': 2, 'readers': ['a', 'b'],
-                 'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
-                 'reference': ['c', 'd'], 
-                 'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5]}
-    remove_non_solr_fields(test_data)
+                 'reference': ['c', 'd']}
     recs = NonBibRecordList()
     rec = NonBibRecord(**test_data)
     recs.nonbib_records.extend([rec._data])
