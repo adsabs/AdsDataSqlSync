@@ -339,14 +339,15 @@ def diagnose_metrics():
     
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
-    parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
-    parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
-    parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
+    parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
+    parser.add_argument('-f', '--filename', default='bibcodes.txt', help='name of file containing the list of bibcode for metrics comparison')
+    parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
+    parser.add_argument('-n', '--metricsSchemaName2', default='', help='name of the postgres metrics schema for comparison')
+    parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
     parser.add_argument('-s', '--batchSize', default=100, 
                         help='used when queuing data')
-    parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
     parser.add_argument('command', default='help', nargs='?',
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | createMetricsTable | dropMetricsTable ' \
@@ -354,7 +355,7 @@ def main():
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline'
-                        + ' | metricsToMasterPipeline')
+                        + ' | metricsToMasterPipeline | metricsCompare')
 
     args = parser.parse_args()
 
@@ -362,7 +363,7 @@ def main():
 
     global logger
     logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
-    logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
+    logger.info('starting AdsDataSqlSync.app with {}'.format(args.command))
     nonbib_connection_string = config.get('INGEST_DATABASE',
                                    'postgresql://postgres@localhost:5432/postgres')
     nonbib_db_engine = create_engine(nonbib_connection_string)
@@ -481,6 +482,40 @@ def main():
     elif args.command == 'metricsDeltaToMasterPipeline':
         nonbib_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
 
+    elif args.command == 'metricsCompare':
+        # compare the values in two metrics postgres tables
+        # useful to compare results from new pipeline to produciton pipeline
+        # read metrics records from both databases and compare
+        metrics_logger = setup_logging('metricsCompare', 'INFO')
+        metrics1 = metrics.Metrics(args.metricsSchemaName)
+        Session = sessionmaker(bind=metrics_db_engine)
+        session = Session()
+        if args.metricsSchemaName:
+            session.execute('set search_path to {}'.format(args.metricsSchemaName))
+
+        metrics2 = metrics.Metrics(args.metricsSchemaName2)
+        metrics_connection_string2 = config.get('METRICS_DATABASE2',
+                                               'postgresql://postgres@localhost:5432/postgres')
+        metrics_db_engine2 = create_engine(metrics_connection_string2)
+        Session2 = sessionmaker(bind=metrics_db_engine2)
+        session2 = Session2()
+        if args.metricsSchemaName2:
+            session2.execute('set search_path to {}'.format(args.metricsSchemaName2))
+
+        print 'm2', metrics_connection_string2
+        print 'm2 schema', args.metricsSchemaName2
+        with open(args.filename) as f:
+            for line in f:
+                bibcode = line.strip()
+                m1 = metrics1.get_by_bibcode(session, bibcode)
+                m2 = metrics2.get_by_bibcode(session2, bibcode)
+                mismatch = metrics.Metrics.metrics_mismatch(line.strip(), m1, m2, metrics_logger)
+                if mismatch:
+                    metrics_logger.error('{} MISMATCHED FIELDS: {}'.format(bibcode, mismatch))
+                    print '{} MISMATCHED FIELDS: {}'.format(bibcode, mismatch)
+        session.close()
+        session2.close()
+
     else:
         print 'app.py: illegal command or missing argument, command = ', args.command
         print '  row view schema name = ', args.rowViewSchemaName
@@ -489,8 +524,10 @@ def main():
 
     if nonbib_db_conn:
         nonbib_db_conn.close()
-            
-    logger.info('completed columnFileIngest with {}, {}'.format(args.command, args.fileType))
+    if metrics_db_conn:
+        metrics_db_conn.close()
+    logger.info('completed {}'.format(args.command))
+
 
 
 if __name__ == "__main__":

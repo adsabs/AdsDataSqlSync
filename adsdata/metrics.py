@@ -7,6 +7,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from sqlalchemy import and_
 from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import create_engine
 from collections import defaultdict
 from datetime import datetime
 import time
@@ -21,6 +22,7 @@ import models
 
 Base = declarative_base()
 meta = MetaData()
+metrics_logger = None
 
 
 class Metrics():
@@ -32,7 +34,6 @@ class Metrics():
         self.schema =  schema_
         self.table = models.MetricsTable()
         self.table.schema = self.schema
-        self.from_scratch = True
 
         # used to buffer writes                                                                                         
         self.upserts = []
@@ -96,13 +97,20 @@ class Metrics():
         first = r.first()
         return first
 
+    def get_by_bibcode(self, session, bibcode):
+        first = session.query(models.MetricsTable).filter(models.MetricsTable.bibcode==bibcode).first()
+        return first
+
+
     def get_by_bibcodes(self, db_conn, bibcodes):
         """ return a list of metrics datbase objects matching the list of passed bibcodes"""
         Session = sessionmaker()
         sess = Session(bind=db_conn)
-        x = sess.execute(select([self.table], self.table.c.bibcode.in_(bibcodes))).fetchall()
+        query = sess.query(models.MetricsTable).filter(models.MetricsTable.bibcode.in_(bibcodes))
+        results = query.all()
+        #x = sess.execute(select([self.table], self.table.c.bibcode.in_(bibcodes))).fetchall()
         sess.close()
-        return x
+        return results
 
 
     def update_metrics_changed(self, db_conn, nonbib_conn, row_view_schema='ingest'):  
@@ -261,20 +269,26 @@ class Metrics():
         return m
 
     @staticmethod
-    def metrics_mismatch(bibcode, metrics1, metrics2):
+    def metrics_mismatch(bibcode, m1, m2, metrics_logger):
         """test function to compare metric records from two different databases"""
-        m1 = metrics1.read(bibcode)
-        m2 = metrics2.read(bibcode)
-        if m1 == None or m2 == None:
+        if m1 == None and m2 == None:
+            metrics_logger.warn('{} not found in either database'.format(bibcode))
             return ['BibcodeNotFound:' + bibcode]
+        elif m1 == None:
+            metrics_logger.warn('{} not found in the first database'.format(bibcode))
+            return ['BibcodeNotFoundFirstDatabase:' + bibcode]
+        elif m2 == None:
+            metrics_logger.warn('{} not found in the second database'.format(bibcode))
+            return ['BibcodeNotFoundSecondDatabase:' + bibcode]
+
         mismatches = []
         fields = ('refereed', 'rn_citations', 'rn_citation_data', 'downloads',
                   'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
                   'reference_num', 'citations', 'refereed_citations', 'author_num',
-                  'an_refereed_citations', 'rn_citations_hist')
+                  'an_refereed_citations') # , 'rn_citations_hist')
         for field in fields:
-            if Metrics.field_mismatch(field, m1, m2):
-                print 'mismatch', bibcode, field  # , m1[field], m2[field]
+            if Metrics.field_mismatch(bibcode, field, m1, m2, metrics_logger):
+                metrics_logger.warn('{} mismatch on {}'.format(bibcode, field))
                 mismatches.append(field)
 
         if len(mismatches) > 0:
@@ -282,101 +296,108 @@ class Metrics():
         return False;
 
     @staticmethod
-    def field_mismatch(fieldname, m1, m2):
+    def field_mismatch(bibcode, fieldname, m1, m2, metrics_logger):
         """test function to compare a field in two different metrics dictionaries"""
+        v1 = getattr(m1, fieldname)
+        v2 = getattr(m2, fieldname)
         # metrics database has sql null for some reads and downloads while new metrics has array of 0 values
-        if m2[fieldname] == None and (m1[fieldname] == [] or m1[fieldname] == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]):
+        if v2 == None and v1 == [] or v1 == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:
             return False
 
-        if type(m1[fieldname]) != type(m2[fieldname]):
+        if type(v1) != type(v2):
+            metrics_logger.warn('{} field type mismatch: {} {}'.format(type(v1), type(v2)))
             return True
 
-        if m1[fieldname] == None and m2[fieldname] == None:
+        if v1 == None and v2 == None:
             return False
 
         if fieldname in ('downloads', 'reads'):
             # only last value may be different to account for slightly older test data
-            t1 = m1[fieldname][:-1]
-            t2 = m2[fieldname][:-1]
-            for v1,v2 in zip(t1, t2):
-                if v1 != v2:
-                    print fieldname, v1, v2
+            t1 = v1[:-1]
+            t2 = v2[:-1]
+            for x1,x2 in zip(t1, t2):
+                if x1 != x2:
+                    metrics_logger.warn('{} {} arrays differ on not last element: {} {}'.format(bibcode, fieldname, x1, x2))
                     return True;
-            t1 = m1[fieldname][-1]
-            t2 = m2[fieldname][-1]
+            t1 = v1[-1]
+            t2 = v2[-1]
             delta = abs(t1 - t2)
-            limit = max(5, v1 * .15)
+            limit = max(5, t1 * .15)
             if delta >  limit:
-                print fieldname, v1, v2
+                metrics_logger.warn('{} {} last element of arrays differ: {} {}, threshold: {}'.format(bibcode, fieldname, t1, t2, limit))
                 return True
             return False
 
         # if value is an array, compare individual elements
-        if isinstance(m1[fieldname], list):
-            delta = abs(len(m1[fieldname]) - len(m2[fieldname]))
+        if isinstance(v1, list):
+            limit = 3
+            delta = abs(len(v1) - len(v2))
             if delta > 0 and delta < 3:
-                print 'warning: list length', len(m1[fieldname]), len(m2[fieldname])
-            elif delta >= 3:
+                metrics_logger.info('{} {} array elements nearly match, lengh delta: {}'.format(bibcode, fieldname, delta))
+            elif delta >= limit:
+                metrics_logger.warn('{} {} array elements do not match, length delta {}, threshold: {}'.format(bibcode, fieldname, delta, limit))
                 return True
 
             warning_count = 0
             if fieldname == 'rn_citation_data':
-                m1_bibs = [element['bibcode'] for element in m1[fieldname]]
-                m2_bibs = [element['bibcode'] for element in m2[fieldname]]
+                m1_bibs = [element['bibcode'] for element in v1]
+                m2_bibs = [element['bibcode'] for element in v2]
                 for v in m1_bibs:
                     if v not in m2_bibs:
                         warning_count += 1
-                        print 'warning: list element missing', v
+                        metrics_logger.warn('{} {} list element missing from second list: {}'.format(bibcode, fieldname, v))
                 for v in m2_bibs:
                     if v not in m1_bibs:
                         warning_count += 1
-                        print 'warning:: list element missing', v
+                        metrics_logger.warn('{} {} list element missing from first list: {}'.format(bibcode, fieldname, v))
             else:
-                for v in m1[fieldname]:
-                    if v not in m2[fieldname]:
+                for v in v1:
+                    if v not in v2:
                         warning_count += 1
-                        print 'warning: list element missing', v
+                        metrics_logger.warn('{} {} list element missing from second list: {}'.format(bibcode, fieldname, v))
 
-                for v in m2[fieldname]:
-                    if v not in m1[fieldname]:
+                for v in v2:
+                    if v not in v1:
                         warning_count += 1
-                        print 'warning:: list element missing', v
+                        metrics_logger.warn('{} {} list element missing from first list: {}'.format(bibcode, fieldname, v))
 
             if warning_count > 3:
+                metrics_logger.warn('{} {} list element mismatch over threshold of 3'.format(bibcode, fieldname))
                 return True
 
             return False
 
         # otherwise, see if scalar values match
-        return Metrics.value_mismatch(m1[fieldname], m2[fieldname])
+        return Metrics.value_mismatch(bibcode, fieldname, v1, v2, metrics_logger)
 
     @staticmethod
-    def value_mismatch(v1, v2):
+    def value_mismatch(bibcode, fieldname, v1, v2, metrics_logger):
         """test function to compare to scalar values from two different metrics dictionaries"""
         if type(v1) != type(v2):
-            print 'type mismatch'
+            metrics_logger.warn('{} {} type values mismatch: {} {}'.format(bibcode, fieldname, type(v1), type(v2)))
             return True
 
         if v1 == None or v2 == None:
             if v1 == None and v2 == None: return False
-            print 'None mismatch'
+            metrics_logger.warn('{} {} None value mismatch {} {}'.format(bibcode, fieldname, v1, v2))
             return True
 
         if isinstance(v1,(str, unicode)):
             mismatch = v1 != v2
             if mismatch:
-                print 'mismatch'
-                print v1
-                print v2
+                metrics_logger.warn('{} {} string values mismatch: {} {} '.format(bibcode, fieldname, v1, v2))
             return mismatch
 
         if isinstance(v1, bool):
+            if v1 != v2:
+                metrics_logger.warn('{} {} boolean values mismatch {} {}'.format(bibcode, fieldname, v1, v2))
             return v1 != v2
+
         if isinstance(v1, (int, float)):
             delta = abs(v1 - v2)
-            limit = 5  # max(abs(v1), abs(v2)) * .15
+            limit = max(abs(v1), abs(v2)) * .1
             if (delta > limit):
-                print 'mismatch', v1, v2
+                metrics_logger.warn('{} {} float values mismatch {} {}, limit {}'.format(bibcode, fieldname, v1, v2, limit))
                 return True
             else:
                 return False
@@ -384,138 +405,13 @@ class Metrics():
             k1 = v1.keys()
             k2 = v2.keys()
             if len(k1) != len(k2):
-                print 'mismatch', v1, v2
+                metrics_logger.warn('{} {} dict number of keys mismatch {} {}'.format(bibcode, fieldname, v1.keys(), v2.keys()))
                 return True
             for k in k1:
                 if v1[k] != v2[k]:
-                    print 'mismatch', k, v1, v2
+                    metrics_logger.warn('{} {} dict values for key {} mismatch {} {}'.format(bibcode, fieldname, k, v1[k], v2[k]))
                     return True
             return False
         raise ValueError('Unexpected data type passed to value_mismatch,type = ' + str(type(v1)))
 
-    @staticmethod
-    def metrics_update(bibcode, metrics_local, metrics_rds, updatebuffer):
-        start = datetime.now()
-        rds = metrics_rds.read(bibcode)
-        local = metrics_local.read(bibcode)
-        #fields = ('id', 'refereed', 'rn_citations', 'rn_citation_data', 'rn_citations_hist', 'downloads',
-        #          'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
-        #          'reference_num', 'citations', 'refereed_citations', 'author_num',
-        #          'an_refereed_citations', 'modtime')
-        #for field in fields:
-        #    print field, rds[field], local[field]
-
-        save_dict = {'bibcode': bibcode}
-        local_fields = ('refereed', 'rn_citations', 'rn_citation_data', 'rn_citations_hist', 'downloads',
-                        'reads', 'an_citations', 'refereed_citation_num', 'citation_num',
-                        'reference_num', 'citations', 'refereed_citations', 'author_num',
-                        'an_refereed_citations', 'modtime')
-        if local is None:
-            return
-
-        for field in local_fields:
-            save_dict[field] = local[field]
-
-        if rds:
-            # here if there's an existing record in the rds database we want to update it
-            # we want to preserve the id field and update the others
-            save_dict['id'] = rds['id']
-            save_dict['tmp_bibcode'] = bibcode
-            # metrics_rds.connection.execute(metrics_rds.updater_sql, [save_dict])
-            update_buffer.append(save_dict)
-        else:
-            # here with a bibcode not in rds
-            # do sql insert
-            save_dict.pop('id', None)
-            print 'performing rds insert'
-            metrics_rds.connection.execute(metrics_rds.table.insert(), [save_dict])
-        end = datetime.now()
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='process row view to Metrics')
-    parser.add_argument('-deltaSchema', default=None, help='schema for delta table')
-    parser.add_argument('-fromScratch', action='store_true', default=False, help='assume empty metrics database')
-    parser.add_argument('-copyFromProgram', action='store_true', default=False, help='called from postgres, output to stdout')
-    parser.add_argument('command', help='metricsCompute|metricsCompare|metricsUpdate')
-    parser.add_argument('-metricsSchema', default='metrics', help='schema for metrics table')
-    parser.add_argument('-r', '--rowViewSchema', default='ingest', help='schema for column tables')
-    parser.add_argument('-b', '--bibcode', help='bibcode or stdin to read bibcodes')
-    parser.add_argument('-f', '--file', help='file of bibcodes, one per line')
-    parser.add_argument('-startOffset', default=1, help='offset into list of bibcodes to process for chunking support')
-    parser.add_argument('-endOffset', default=-1, help='when to stop processing list of bibcodes for chunking support')
-
-    args = parser.parse_args()
-    m = Metrics(args.metricsSchema, {'FROM_SCRATCH': False})
-    sql_sync = row_view.SqlSync(args.rowViewSchema)
-    if args.command == 'metricsCompute' and args.bibcode:
-        if (args.bibcode != 'stdin'):
-            m.update_metrics_bibcode(args.bibcode, sql_sync)
-            m.flush()
-        else:
-            count = 0
-            while True:
-                bibcode = sys.stdin.readline()
-                bibcode = bibcode.strip()
-                if len(bibcode) == 0:
-                    print 'final flush'
-                    m.flush()
-                    break
-                m.update_metrics_bibcode(bibcode, sql_sync)
-                count += 1
-                if count % 100 == 0:
-                    print 'flushing records'
-                    m.flush()
-
-    elif args.command == 'metricsCompute' and args.deltaSchema:
-        print 'saving delta'
-        m = Metrics(args.metricsSchema)
-        m.update_metrics_delta(args.bibcode, args.rowViewSchema)
-
-    elif args.command == 'metricsCompute':
-        m = Metrics(args.metricsSchema)
-        m.update_metrics_all(args.rowViewSchema, start_offset=int(args.startOffset), end_offset=int(args.endOffset))
-
-    elif args.command == 'metricsCompare' and args.bibcode:
-        metrics1 =  Metrics(args.metricsSchema, {'METRICS_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-        metrics2 = Metrics('metricsstaging', {'METRICS_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-        #metrics2 = Metrics('', {'METRICS_DATABASE': 'postgresql://metrics:metrics@adsabs-psql.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'})
-        print 'metrics1 {}, metrics2 {}'.format(metrics1, metrics2)
-        if (args.bibcode == 'stdin'):
-            while True:
-                line = sys.stdin.readline()
-                if len(line) == 0: break
-                mismatch = Metrics.metrics_mismatch(line.strip(), metrics1, metrics2)
-                if mismatch:
-                    print line.strip(), ' MISMATCH = ', mismatch
-        else:
-            mismatch = Metrics.metrics_mismatch(args.bibcode, metrics1, metrics2)
-            print 'mismatch = ', mismatch
-
-    elif args.command == 'metricsUpdate' and args.file:
-        metrics1 =  Metrics(args.metricsSchema, {'METRICS_DATABASE': 'postgresql://postgres@localhost:5432/postgres'})
-        metrics2 = Metrics('', {'METRICS_DATABASE': 'postgresql://metrics:metrics@testing.ci1iae2ep00k.us-east-1.rds.amazonaws.com:5432/metrics'})
-        update_buffer = []
-        i = 0
-        print 'metrics1 {}, metrics2 {}'.format(metrics1, metrics2)
-        f = open(args.file)
-        if f:
-            while True:
-                line = f.readline()
-                if len(line) == 0:
-                    print 'final saving {} records'.format(len(update_buffer))
-                    print datetime.now()
-                    if len(update_buffer) > 0:
-                        metrics2.connection.execute(metrics2.updater_sql, update_buffer)
-                    print i, datetime.now()
-                    exit()
-                Metrics.metrics_update(line.strip(), metrics1, metrics2, update_buffer)
-                i += 1
-                if len(update_buffer) >= 100:
-                    metrics2.connection.execute(metrics2.updater_sql, update_buffer)
-                    update_buffer = []
-                    print i, datetime.now()
-
-        else:
-            Metrics.metrics_update(args.bibcode, metrics1, metrics2)
 
