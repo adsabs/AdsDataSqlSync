@@ -102,14 +102,10 @@ class Metrics():
         return first
 
 
-    def get_by_bibcodes(self, db_conn, bibcodes):
+    def get_by_bibcodes(self, session, bibcodes):
         """ return a list of metrics datbase objects matching the list of passed bibcodes"""
-        Session = sessionmaker()
-        sess = Session(bind=db_conn)
-        query = sess.query(models.MetricsTable).filter(models.MetricsTable.bibcode.in_(bibcodes))
+        query = session.query(models.MetricsTable).filter(models.MetricsTable.bibcode.in_(bibcodes))
         results = query.all()
-        #x = sess.execute(select([self.table], self.table.c.bibcode.in_(bibcodes))).fetchall()
-        sess.close()
         return results
 
 
