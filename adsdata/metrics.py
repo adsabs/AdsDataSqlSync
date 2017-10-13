@@ -341,35 +341,33 @@ class Metrics():
         if isinstance(v1, list):
             limit = 3
             delta = abs(len(v1) - len(v2))
-            if delta > 0 and delta < 3:
+            if delta > 0 and delta < limit:
                 metrics_logger.info('{} {} array elements nearly match, lengh delta: {}'.format(bibcode, fieldname, delta))
             elif delta >= limit:
                 metrics_logger.warn('{} {} array elements do not match, length delta {}, threshold: {}'.format(bibcode, fieldname, delta, limit))
                 return True
 
             warning_count = 0
+            # compute delta between lists, then report differences
             if fieldname == 'rn_citation_data':
-                m1_bibs = [element['bibcode'] for element in v1]
-                m2_bibs = [element['bibcode'] for element in v2]
-                for v in m1_bibs:
-                    if v not in m2_bibs:
-                        warning_count += 1
-                        metrics_logger.warn('{} {} list element missing from second list: {}'.format(bibcode, fieldname, v))
-                for v in m2_bibs:
-                    if v not in m1_bibs:
-                        warning_count += 1
-                        metrics_logger.warn('{} {} list element missing from first list: {}'.format(bibcode, fieldname, v))
+                m1_bibs = {element['bibcode'] for element in v1}
+                m2_bibs = {element['bibcode'] for element in v2}
+                missing_from_first = m2_bibs.difference(m1_bibs)
+                missing_from_second = m1_bibs.difference(m2_bibs)
             else:
-                for v in v1:
-                    if v not in v2:
-                        warning_count += 1
-                        metrics_logger.warn('{} {} list element missing from second list: {}'.format(bibcode, fieldname, v))
+                v1_set = set(v1)
+                v2_set = set(v2)
+                missing_from_first = v2_set.difference(v1_set)
+                missing_from_second = v1_set.difference(v2_set)
 
-                for v in v2:
-                    if v not in v1:
-                        warning_count += 1
-                        metrics_logger.warn('{} {} list element missing from first list: {}'.format(bibcode, fieldname, v))
-
+            if len(missing_from_first):
+                warning_count += len(missing_from_first)
+                for v in missing_from_first:
+                    metrics_logger.warn('{} {} list element missing from first list: {}'.format(bibcode, fieldname, v))
+            if len(missing_from_second):
+                warning_count += len(missing_from_second)
+                for v in missing_from_second:
+                    metrics_logger.warn('{} {} list element missing from second list: {}'.format(bibcode, fieldname, v))
             if warning_count > 3:
                 metrics_logger.warn('{} {} list element mismatch over threshold of 3'.format(bibcode, fieldname))
                 return True

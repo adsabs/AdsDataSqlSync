@@ -51,7 +51,6 @@ class metrics_test(unittest.TestCase):
             for record in self.no_citations:
                 metrics_dict = met.row_view_to_metrics(record, None)
                 self.assertEqual(record.bibcode, metrics_dict.bibcode, 'bibcode check')
-                self.assertEqual(record.id, metrics_dict.id, 'id check')
                 self.assertEqual(record.citations, metrics_dict.citations, 'citations check')
                 self.assertEqual(record.reads, metrics_dict.reads, 'reads check')
                 self.assertEqual(record.downloads, metrics_dict.downloads, 'downloads check')
@@ -98,6 +97,59 @@ class metrics_test(unittest.TestCase):
             self.assertEqual(metrics_dict.rn_citation_data[0], rn_citation_data_0, 'rn citation data')
             self.assertAlmostEqual(metrics_dict.an_refereed_citations, 2. / t2_age, 5, 'an refereed citations')
             self.assertAlmostEqual(metrics_dict.rn_citations, .6, 5, 'rn citations')
+
+    def test_validate_lists(self):
+        """test validation code for lists
+
+        send both matching and mismatching data to metrics list validation and verify correct responses"""
+
+        # base data
+        rn_citation_data1 = Mock()
+        rn_citation_data1.refereed_citations = ["2015MNRAS.447.1618S", "2016MNRAS.456.1886S", "2015MNRAS.451..149J"]
+        rn_citation_data1.rn_citation_data = [{"ref_norm": 0.0125, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.447.1618S", "cityear": 2015}, 
+                                              {"ref_norm": 0.012048192771084338, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2016MNRAS.456.1886S", "cityear": 2016}, 
+                                              {"ref_norm": 0.02702702702702703, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.451..149J", "cityear": 2015}]
+
+        # only slightly different than base, should not be a mismatch
+        rn_citation_data1a = Mock()
+        rn_citation_data1a.refereed_citations = ["2015MNRAS.447.1618S", "2016MNRAS.456.1886S", "2015MNRAS.451..149Z"]
+        rn_citation_data1a.rn_citation_data = [{"ref_norm": 0.0125, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.447.1618Z", "cityear": 2015}, 
+                                              {"ref_norm": 0.012048192771084338, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2016MNRAS.456.1886S", "cityear": 2016}, 
+                                              {"ref_norm": 0.02702702702702703, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.451..149J", "cityear": 2015}]
+
+        # very different from base, should be a mismatch
+        rn_citation_data2 = Mock()
+        rn_citation_data2.refereed_citations = ["2015MNRAS.447.1618Z", "2016MNRAS.456.1886Z", "2015MNRAS.451..149Z", "2015MNRAS.451..149Y"]
+        rn_citation_data2.rn_citation_data = [{"ref_norm": 0.0125, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.447.1618Z", "cityear": 2015}, 
+                                              {"ref_norm": 0.012048192771084338, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2016MNRAS.456.1886Z", "cityear": 2016}, 
+                                              {"ref_norm": 0.02702702702702703, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.451..149Z", "cityear": 2015},
+                                              {"ref_norm": 0.02702702702702703, "pubyear": 2014, "auth_norm": 0.3333333333333333, 
+                                               "bibcode": "2015MNRAS.451..149Y", "cityear": 2015}]
+
+        logger = Mock()
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'rn_citation_data', rn_citation_data1, rn_citation_data1, logger)
+        self.assertFalse(mismatch, 'validate rn_citation_data')
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'rn_citation_data', rn_citation_data1, rn_citation_data2, logger)
+        self.assertTrue(mismatch, 'validate rn_citation_data')
+
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'rn_citation_data', rn_citation_data1, rn_citation_data1a, logger)
+        self.assertFalse(mismatch, 'validate rn_citation_data')
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'refereed_citations', rn_citation_data1a, rn_citation_data1a, logger)
+        self.assertFalse(mismatch, 'validate refereed_citations')
+
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'refereed_citations', rn_citation_data1, rn_citation_data1, logger)
+        self.assertFalse(mismatch, 'validate refereed_citations')
+        mismatch = Metrics.field_mismatch('2014AJ....147..124M', 'refereed_citations', rn_citation_data1, rn_citation_data2, logger)
+        self.assertTrue(mismatch, 'validate refereed_citations')
 
         
 if __name__ == '__main__':
