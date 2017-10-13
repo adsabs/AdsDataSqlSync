@@ -200,9 +200,10 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     session.execute('set search_path to {}'.format(schema))
     tmp = []
     i = 0
+    n = nonbib.NonBib(schema)
     max_rows = config['MAX_ROWS']
     for current_delta in session.query(models.NonBibDeltaTable).yield_per(100):
-        row = nonbib.get_by_bibcode(current_delta.bibcode, nonbib_to_master_fields)
+        row = n.get_by_bibcode(nonbib_engine, current_delta.bibcode, nonbib_to_master_fields)
         row = nonbib_to_master_dict(row)
         add_data_link(session, row)
         rec = NonBibRecord(**row)
@@ -276,14 +277,14 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engi
     i = 0
     for current_delta in nonbib_session.query(models.NonBibDeltaTable).yield_per(100):
         row = m.get_by_bibcode(metrics_session, current_delta.bibcode)
-        rec = NonBibRecord(row2dict(row))
+        rec = row2dict(row)
         rec.pop('id')
         rec = MetricsRecord(**dict(rec))
         tmp.append(rec._data)
         i += 1
         if max_rows > 0 and i > max_rows:
             break
-        if len(recs.metrics_records) >= batch_size:
+        if len(tmp) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
             logger.debug("Calling metrics 'app.forward_message' with '%s' messages", len(recs.metrics_records))
@@ -492,7 +493,6 @@ def main():
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
-        print 'diagnose = ', args.diagnose
         nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
