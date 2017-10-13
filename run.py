@@ -201,7 +201,7 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    for current_delta in session.query(models.DeltaTable).yield_per(100):
+    for current_delta in session.query(models.NonBibDeltaTable).yield_per(100):
         row = nonbib.get_by_bibcode(current_delta.bibcode, nonbib_to_master_fields)
         row = nonbib_to_master_dict(row)
         add_data_link(session, row)
@@ -255,21 +255,34 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
         task_output_metrics.delay(recs)
 
 
-def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_schema, batch_size=1):
+def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engine, nonbib_schema,  batch_size=1):
     """send data for changed metrics to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
     perhaps ingested on succesive days"""
+    global config
+    Nonbib_Session = sessionmaker(bind=nonbib_engine)
+    nonbib_session = Nonbib_Session()
+    nonbib_session.execute('set search_path to {}'.format(nonbib_schema))
+
+    Metrics_Session = sessionmaker(bind=metrics_engine)
+    metrics_session = Metrics_Session()
+    metrics_session.execute('set search_path to {}'.format(metrics_schema))
+
     m = metrics.Metrics(metrics_schema)
     n = nonbib.NonBib(nonbib_schema)
-    connection = n.engine.connect()
+    max_rows = config['MAX_ROWS']
     tmp = []
-    for current_delta in session.query(models.DeltaTable).yield_per(100):
-        row = m.read(current_delta.bibcode)
+    i = 0
+    for current_delta in nonbib_session.query(models.NonBibDeltaTable).yield_per(100):
+        row = m.get_by_bibcode(metrics_session, current_delta.bibcode)
         rec = NonBibRecord(row2dict(row))
         rec.pop('id')
         rec = MetricsRecord(**dict(rec))
         tmp.append(rec._data)
+        i += 1
+        if max_rows > 0 and i > max_rows:
+            break
         if len(recs.metrics_records) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
@@ -355,7 +368,7 @@ def main():
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline'
-                        + ' | metricsToMasterPipeline | metricsCompare')
+                        + ' | metricsToMasterPipeline | metricsDeltaToMasterPipeline | metricsCompare')
 
     args = parser.parse_args()
 
@@ -400,8 +413,8 @@ def main():
         m.update_metrics_all(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
 
     elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
-        m.update_metrics_changed(args.rowViewSchemaName)
+        m = metrics.Metrics(args.metricsSchemaName)
+        m.update_metrics_changed(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
 
     elif args.command == 'renameSchema' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
@@ -429,10 +442,16 @@ def main():
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         # read in flat files, compare to staging/baseline
+        baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
         sql_sync.drop_column_tables(nonbib_db_engine)
+        sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
+
+        baseline_sql_sync = None
         sql_sync.create_column_tables(nonbib_db_engine)
-       
         load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
+
+        sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
         sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
@@ -455,32 +474,32 @@ def main():
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
         # drop tables, rename schema, create tables, load data, compute delta, compute metrics
         baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
-        baseline_sql_sync.drop_column_tables()
-        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
+        sql_sync.drop_column_tables(nonbib_db_engine)
+        sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
         baseline_sql_sync = None
         sql_sync.create_column_tables(nonbib_db_engine)
-       
-        load_column_files(config, sql_sync)
+        load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
 
-        sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
-        sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+        sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
-        m.update_metrics_changed(args.rowViewSchemaName)
+        m = metrics.Metrics(args.metricsSchemaName)
+        m.update_metrics_changed(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
+
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
         diagnose_nonbib()
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
         print 'diagnose = ', args.diagnose
-        nonbib_delta_to_master_pipeline(nonbib_eb_engine, args.rowViewSchemaName, int(args.batchSize))
+        nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
     elif args.command == 'metricsToMasterPipeline':
         metrics_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
-        nonbib_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
+        metrics_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
 
     elif args.command == 'metricsCompare':
         # compare the values in two metrics postgres tables

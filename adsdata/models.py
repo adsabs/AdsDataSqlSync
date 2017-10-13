@@ -37,7 +37,7 @@ class NonBibTable(Base):
     reference = Column(ARRAY(String))
 
 class NonBibDeltaTable(Base):
-    __tablename__ = 'changedrowsmm'
+    __tablename__ = 'changedrowsm'
     bibcode = Column(String, primary_key=True)
     id = Column(Integer)
 

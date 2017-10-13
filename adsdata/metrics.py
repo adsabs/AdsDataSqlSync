@@ -84,6 +84,7 @@ class Metrics():
         sess.execute('set search_path to {}'.format('metrics'))
         #sess.bulk_save_objects(self.upserts)
         for current in self.upserts:
+            current.pop('id')
             sess.add(current)
         sess.commit()
         sess.close()
@@ -111,20 +112,32 @@ class Metrics():
 
     def update_metrics_changed(self, db_conn, nonbib_conn, row_view_schema='ingest'):  
         """changed bibcodes are in sql table, for each we update metrics record"""
-        Session = sessionmaker(bind=nonbib_conn)
-        nonbib_sess = Session()
+        Nonbib_Session = sessionmaker(bind=nonbib_conn)
+        nonbib_sess = Nonbib_Session()
         nonbib_sess.execute('set search_path to {}'.format(row_view_schema))
+
+        Metrics_Session = sessionmaker()
+        metrics_sess = Metrics_Session(bind=db_conn)
+        metrics_sess.execute('set search_path to {}'.format('metrics'))
         
         sql_sync = nonbib.NonBib(row_view_schema)
         query = nonbib_sess.query(models.NonBibTable)
         count = 0
-        for delta_row in session.query(models.NonBibDeltaTable).yield_per(100):
+        for delta_row in nonbib_sess.query(models.NonBibDeltaTable).yield_per(100):
             row = sql_sync.get_by_bibcode(nonbib_conn, delta_row.bibcode)
-            metrics_dict = self.row_view_to_metrics(row, nonbib_conn, row_view_schema)
-            self.save(db_conn, metrics_dict)
+            metrics_old = metrics_sess.query(models.MetricsTable).filter(models.MetricsTable.bibcode == delta_row.bibcode).first()
+            metrics_new = self.row_view_to_metrics(row, nonbib_conn, row_view_schema, metrics_old)
+            if metrics_old:
+                metrics_sess.merge(metrics_new)
+            else:
+                metrics_sess.add(metrics_new)
+            metrics_sess.commit()
+
             if (count % 10000) == 0:
                 self.logger.debug('delta count = {}, bibcode = {}'.format(count, delta_row.bibcode))
             count += 1
+        nonbib_sess.close()
+        metrics_sess.close()
         self.flush(db_conn)
         # need to close?
 
@@ -195,13 +208,13 @@ class Metrics():
     #  c = number of citations tha paper received (why not call it references?)
     #  c/a = normalized citations
     #  sum over N papers
-    def row_view_to_metrics(self, passed_row_view, nonbib_db_conn, row_view_schema='nonbib'):
+    def row_view_to_metrics(self, passed_row_view, nonbib_db_conn, row_view_schema='nonbib', m=None):
         """convert the passed row view into a complete metrics dictionary"""
+        if m is None:
+            m = models.MetricsTable()            
         # first do easy fields
         bibcode = passed_row_view.bibcode
-        m = models.MetricsTable()
         m.bibcode = bibcode
-        m.id = passed_row_view.id
         m.refereed = passed_row_view.refereed
         m.citations = passed_row_view.citations
         m.reads = passed_row_view.reads
