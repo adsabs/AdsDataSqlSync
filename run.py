@@ -225,6 +225,28 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
         task_output_results.delay(recs)
 
 
+def nonbib_bibs_to_master_pipeline(nonbib_engine, schema, bibcodes):
+    """send data for the passed bibcodes to master"""
+    Session = sessionmaker(bind=nonbib_engine)
+    session = Session()
+    session.execute('set search_path to {}'.format(schema))
+    n = nonbib.NonBib(schema)
+    tmp = [] 
+    for bibcode in bibcodes:
+        row = n.get_by_bibcode(nonbib_engine, bibcode, nonbib_to_master_fields)
+        if row:
+            row = nonbib_to_master_dict(row)
+            add_data_link(session, row)
+            rec = NonBibRecord(**row)
+            tmp.append(rec._data)
+        else:
+            print 'unknown bibcode ', bibcode
+    recs = NonBibRecordList()
+    recs.nonbib_records.extend(tmp)
+    logger.debug("Calling 'app.forward_message' for '%s' bibcodes", len(recs.nonbib_records))
+    task_output_results.delay(recs)
+
+
 def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
     """send all metrics data to queue for delivery to master pipeline"""
     global config
@@ -297,6 +319,30 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engi
         logger.debug("Calling metrics 'app.forward_message' with final '%s'", str(rec))
         task_output_metrics.delay(recs)
 
+def metrics_bibs_to_master_pipeline(metrics_engine, metrics_schema, bibcodes):
+    """send the passed list of bibcodes to master"""
+    Metrics_Session = sessionmaker(bind=metrics_engine)
+    metrics_session = Metrics_Session()
+    metrics_session.execute('set search_path to {}'.format(metrics_schema))
+    tmp = []
+    m = metrics.Metrics(metrics_schema)
+    for bibcode in bibcodes:
+        row = m.get_by_bibcode(metrics_session, bibcode)
+        if row:
+            rec = row2dict(row)
+            rec.pop('id')
+            rec = MetricsRecord(**dict(rec))
+            tmp.append(rec._data)
+        else:
+            print 'unknown bibcode: ', bibcode
+        
+    recs = MetricsRecordList()
+    recs.metrics_records.extend(tmp)
+    logger.debug("Calling metrics 'app.forward_message' for '%s' bibcodes", str(rec))
+    task_output_metrics.delay(recs)
+        
+    
+
 
 
 def diagnose_nonbib():
@@ -353,15 +399,15 @@ def diagnose_metrics():
     
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
-    parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
+    parser.add_argument('-t', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
     parser.add_argument('-f', '--filename', default='bibcodes.txt', help='name of file containing the list of bibcode for metrics comparison')
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-n', '--metricsSchemaName2', default='', help='name of the postgres metrics schema for comparison')
     parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
-    parser.add_argument('-s', '--batchSize', default=100, 
-                        help='used when queuing data')
+    parser.add_argument('-s', '--batchSize', default=100,  help='used when queuing data')
+    parser.add_argument('-b', '--bibcodes', default='',  help='comma separate list of bibcodes send to master pipeline')
     parser.add_argument('command', default='help', nargs='?',
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | createMetricsTable | dropMetricsTable ' \
@@ -490,12 +536,18 @@ def main():
 
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
         diagnose_nonbib()
+    elif args.command == 'nonbibToMasterPipeline' and args.bibcodes:
+        bibcodes = args.bibcodes.split(',')
+        nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
         nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
+    elif args.command == 'metricsToMasterPipeline' and args.bibcodes:
+        bibcodes = args.bibcodes.split(',')
+        metrics_bibs_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, bibcodes)
     elif args.command == 'metricsToMasterPipeline':
         metrics_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
