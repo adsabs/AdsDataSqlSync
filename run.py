@@ -200,9 +200,10 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     session.execute('set search_path to {}'.format(schema))
     tmp = []
     i = 0
+    n = nonbib.NonBib(schema)
     max_rows = config['MAX_ROWS']
-    for current_delta in session.query(models.DeltaTable).yield_per(100):
-        row = nonbib.get_by_bibcode(current_delta.bibcode, nonbib_to_master_fields)
+    for current_delta in session.query(models.NonBibDeltaTable).yield_per(100):
+        row = n.get_by_bibcode(nonbib_engine, current_delta.bibcode, nonbib_to_master_fields)
         row = nonbib_to_master_dict(row)
         add_data_link(session, row)
         rec = NonBibRecord(**row)
@@ -222,6 +223,28 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
         recs.nonbib_records.extend(tmp)
         logger.debug("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
         task_output_results.delay(recs)
+
+
+def nonbib_bibs_to_master_pipeline(nonbib_engine, schema, bibcodes):
+    """send data for the passed bibcodes to master"""
+    Session = sessionmaker(bind=nonbib_engine)
+    session = Session()
+    session.execute('set search_path to {}'.format(schema))
+    n = nonbib.NonBib(schema)
+    tmp = [] 
+    for bibcode in bibcodes:
+        row = n.get_by_bibcode(nonbib_engine, bibcode, nonbib_to_master_fields)
+        if row:
+            row = nonbib_to_master_dict(row)
+            add_data_link(session, row)
+            rec = NonBibRecord(**row)
+            tmp.append(rec._data)
+        else:
+            print 'unknown bibcode ', bibcode
+    recs = NonBibRecordList()
+    recs.nonbib_records.extend(tmp)
+    logger.debug("Calling 'app.forward_message' for '%s' bibcodes", len(recs.nonbib_records))
+    task_output_results.delay(recs)
 
 
 def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
@@ -255,22 +278,35 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
         task_output_metrics.delay(recs)
 
 
-def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_schema, batch_size=1):
+def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engine, nonbib_schema,  batch_size=1):
     """send data for changed metrics to master pipeline
 
     the delta table was computed by comparing to sets of nonbib data
     perhaps ingested on succesive days"""
+    global config
+    Nonbib_Session = sessionmaker(bind=nonbib_engine)
+    nonbib_session = Nonbib_Session()
+    nonbib_session.execute('set search_path to {}'.format(nonbib_schema))
+
+    Metrics_Session = sessionmaker(bind=metrics_engine)
+    metrics_session = Metrics_Session()
+    metrics_session.execute('set search_path to {}'.format(metrics_schema))
+
     m = metrics.Metrics(metrics_schema)
     n = nonbib.NonBib(nonbib_schema)
-    connection = n.engine.connect()
+    max_rows = config['MAX_ROWS']
     tmp = []
-    for current_delta in session.query(models.DeltaTable).yield_per(100):
-        row = m.read(current_delta.bibcode)
-        rec = NonBibRecord(row2dict(row))
+    i = 0
+    for current_delta in nonbib_session.query(models.NonBibDeltaTable).yield_per(100):
+        row = m.get_by_bibcode(metrics_session, current_delta.bibcode)
+        rec = row2dict(row)
         rec.pop('id')
         rec = MetricsRecord(**dict(rec))
         tmp.append(rec._data)
-        if len(recs.metrics_records) >= batch_size:
+        i += 1
+        if max_rows > 0 and i > max_rows:
+            break
+        if len(tmp) >= batch_size:
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
             logger.debug("Calling metrics 'app.forward_message' with '%s' messages", len(recs.metrics_records))
@@ -282,6 +318,30 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_sche
         recs.metrics_records.extend(tmp)
         logger.debug("Calling metrics 'app.forward_message' with final '%s'", str(rec))
         task_output_metrics.delay(recs)
+
+def metrics_bibs_to_master_pipeline(metrics_engine, metrics_schema, bibcodes):
+    """send the passed list of bibcodes to master"""
+    Metrics_Session = sessionmaker(bind=metrics_engine)
+    metrics_session = Metrics_Session()
+    metrics_session.execute('set search_path to {}'.format(metrics_schema))
+    tmp = []
+    m = metrics.Metrics(metrics_schema)
+    for bibcode in bibcodes:
+        row = m.get_by_bibcode(metrics_session, bibcode)
+        if row:
+            rec = row2dict(row)
+            rec.pop('id')
+            rec = MetricsRecord(**dict(rec))
+            tmp.append(rec._data)
+        else:
+            print 'unknown bibcode: ', bibcode
+        
+    recs = MetricsRecordList()
+    recs.metrics_records.extend(tmp)
+    logger.debug("Calling metrics 'app.forward_message' for '%s' bibcodes", str(rec))
+    task_output_metrics.delay(recs)
+        
+    
 
 
 
@@ -339,14 +399,15 @@ def diagnose_metrics():
     
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
-    parser.add_argument('--fileType', default=None, help='all,downloads,simbad,etc.')
-    parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
-    parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
-    parser.add_argument('-b', '--rowViewBaselineSchemaName', default='nonbibstaging', 
+    parser.add_argument('-t', '--rowViewBaselineSchemaName', default='nonbibstaging', 
                         help='name of old postgres schema, used to compute delta')
-    parser.add_argument('-s', '--batchSize', default=100, 
-                        help='used when queuing data')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
+    parser.add_argument('-f', '--filename', default='bibcodes.txt', help='name of file containing the list of bibcode for metrics comparison')
+    parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
+    parser.add_argument('-n', '--metricsSchemaName2', default='', help='name of the postgres metrics schema for comparison')
+    parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
+    parser.add_argument('-s', '--batchSize', default=100,  help='used when queuing data')
+    parser.add_argument('-b', '--bibcodes', default='',  help='comma separate list of bibcodes send to master pipeline')
     parser.add_argument('command', default='help', nargs='?',
                         help='ingest | verify | createIngestTables | dropIngestTables | renameSchema ' \
                         + ' | createJoinedRows | createMetricsTable | dropMetricsTable ' \
@@ -354,7 +415,7 @@ def main():
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline'
-                        + ' | metricsToMasterPipeline')
+                        + ' | metricsToMasterPipeline | metricsDeltaToMasterPipeline | metricsCompare')
 
     args = parser.parse_args()
 
@@ -362,7 +423,7 @@ def main():
 
     global logger
     logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
-    logger.info('starting AdsDataSqlSync.app with {}, {}'.format(args.command, args.fileType))
+    logger.info('starting AdsDataSqlSync.app with {}'.format(args.command))
     nonbib_connection_string = config.get('INGEST_DATABASE',
                                    'postgresql://postgres@localhost:5432/postgres')
     nonbib_db_engine = create_engine(nonbib_connection_string)
@@ -399,8 +460,8 @@ def main():
         m.update_metrics_all(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
 
     elif args.command == 'populateMetricsTableDelta' and args.rowViewSchemaName and args.metricsSchemaName:
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
-        m.update_metrics_changed(args.rowViewSchemaName)
+        m = metrics.Metrics(args.metricsSchemaName)
+        m.update_metrics_changed(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
 
     elif args.command == 'renameSchema' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
@@ -428,10 +489,16 @@ def main():
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
         # read in flat files, compare to staging/baseline
+        baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
         sql_sync.drop_column_tables(nonbib_db_engine)
+        sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
+
+        baseline_sql_sync = None
         sql_sync.create_column_tables(nonbib_db_engine)
-       
         load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
+
+        sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
         sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
@@ -454,32 +521,71 @@ def main():
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
         # drop tables, rename schema, create tables, load data, compute delta, compute metrics
         baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
-        baseline_sql_sync.drop_column_tables()
-        sql_sync.rename_schema(args.rowViewBaselineSchemaName)
+        sql_sync.drop_column_tables(nonbib_db_engine)
+        sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
         baseline_sql_sync = None
         sql_sync.create_column_tables(nonbib_db_engine)
-       
-        load_column_files(config, sql_sync)
+        load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
 
-        sql_sync.create_delta_rows(args.rowViewBaselineSchemaName)
-        sql_sync.log_delta_reasons(args.rowViewBaselineSchemaName)
+        sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
+        sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
-        m = metrics.Metrics(args.metricsSchemaName, {'FROM_SCRATCH': False, 'COPY_FROM_PROGRAM': False})
-        m.update_metrics_changed(args.rowViewSchemaName)
+        m = metrics.Metrics(args.metricsSchemaName)
+        m.update_metrics_changed(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
+
     elif args.command == 'nonbibToMasterPipeline' and args.diagnose:
         diagnose_nonbib()
+    elif args.command == 'nonbibToMasterPipeline' and args.bibcodes:
+        bibcodes = args.bibcodes.split(',')
+        nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
-        print 'diagnose = ', args.diagnose
-        nonbib_delta_to_master_pipeline(nonbib_eb_engine, args.rowViewSchemaName, int(args.batchSize))
+        nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
+    elif args.command == 'metricsToMasterPipeline' and args.bibcodes:
+        bibcodes = args.bibcodes.split(',')
+        metrics_bibs_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, bibcodes)
     elif args.command == 'metricsToMasterPipeline':
         metrics_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, int(args.batchSize))
     elif args.command == 'metricsDeltaToMasterPipeline':
-        nonbib_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, args.rowViewSchemaName, int(args.batchSize))
+        metrics_delta_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
+
+    elif args.command == 'metricsCompare':
+        # compare the values in two metrics postgres tables
+        # useful to compare results from new pipeline to produciton pipeline
+        # read metrics records from both databases and compare
+        metrics_logger = setup_logging('metricsCompare', 'INFO')
+        metrics1 = metrics.Metrics(args.metricsSchemaName)
+        Session = sessionmaker(bind=metrics_db_engine)
+        session = Session()
+        if args.metricsSchemaName:
+            session.execute('set search_path to {}'.format(args.metricsSchemaName))
+
+        metrics2 = metrics.Metrics(args.metricsSchemaName2)
+        metrics_connection_string2 = config.get('METRICS_DATABASE2',
+                                               'postgresql://postgres@localhost:5432/postgres')
+        metrics_db_engine2 = create_engine(metrics_connection_string2)
+        Session2 = sessionmaker(bind=metrics_db_engine2)
+        session2 = Session2()
+        if args.metricsSchemaName2:
+            session2.execute('set search_path to {}'.format(args.metricsSchemaName2))
+
+        print 'm2', metrics_connection_string2
+        print 'm2 schema', args.metricsSchemaName2
+        with open(args.filename) as f:
+            for line in f:
+                bibcode = line.strip()
+                m1 = metrics1.get_by_bibcode(session, bibcode)
+                m2 = metrics2.get_by_bibcode(session2, bibcode)
+                mismatch = metrics.Metrics.metrics_mismatch(line.strip(), m1, m2, metrics_logger)
+                if mismatch:
+                    metrics_logger.error('{} MISMATCHED FIELDS: {}'.format(bibcode, mismatch))
+                    print '{} MISMATCHED FIELDS: {}'.format(bibcode, mismatch)
+        session.close()
+        session2.close()
 
     else:
         print 'app.py: illegal command or missing argument, command = ', args.command
@@ -489,8 +595,10 @@ def main():
 
     if nonbib_db_conn:
         nonbib_db_conn.close()
-            
-    logger.info('completed columnFileIngest with {}, {}'.format(args.command, args.fileType))
+    if metrics_db_conn:
+        metrics_db_conn.close()
+    logger.info('completed {}'.format(args.command))
+
 
 
 if __name__ == "__main__":
