@@ -84,7 +84,6 @@ class Metrics():
         sess.execute('set search_path to {}'.format('metrics'))
         #sess.bulk_save_objects(self.upserts)
         for current in self.upserts:
-            current.pop('id')
             sess.add(current)
         sess.commit()
         sess.close()
