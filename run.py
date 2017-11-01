@@ -20,7 +20,7 @@ config = {}
 
 # non-link fields that are sent to master pipeline
 nonbib_to_master_fields = ('bibcode', 'boost', 'citation_count',
-                           'grants', 'ned_objects', 'read_count', 
+                           'grants', 'ned_objects', 'norm_cites', 'read_count', 
                            'readers', 'reference', 'simbad_objects')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
