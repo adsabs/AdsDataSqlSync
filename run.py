@@ -488,18 +488,17 @@ def main():
         m.update_metrics_all(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
 
     elif args.command == 'runRowViewPipelineDelta' and args.rowViewSchemaName and args.rowViewBaselineSchemaName:
-        # read in flat files, compare to staging/baseline
+        # we delete the old data
         baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
-        sql_sync.drop_column_tables(nonbib_db_engine)
+        baseline_engine = create_engine(nonbib_connection_string)
+        baseline_sql_sync.drop_column_tables(baseline_engine)
+        # rename the current to be the old (for later comparison)
         sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
-
+        # create the new and populate
         baseline_sql_sync = None
         sql_sync.create_column_tables(nonbib_db_engine)
         load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync)
-
-        sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
-        sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
-
+        # compute delta between old and new
         sql_sync.create_delta_rows(nonbib_db_conn, args.rowViewBaselineSchemaName)
         sql_sync.log_delta_reasons(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
