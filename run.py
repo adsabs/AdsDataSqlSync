@@ -520,7 +520,8 @@ def main():
     elif args.command == 'runPipelinesDelta' and args.rowViewSchemaName and args.metricsSchemaName and args.rowViewBaselineSchemaName:
         # drop tables, rename schema, create tables, load data, compute delta, compute metrics
         baseline_sql_sync = nonbib.NonBib(args.rowViewBaselineSchemaName)
-        sql_sync.drop_column_tables(nonbib_db_engine)
+        baseline_engine = create_engine(nonbib_connection_string)
+        baseline_sql_sync.drop_column_tables(baseline_engine)
         sql_sync.rename_schema(nonbib_db_conn, args.rowViewBaselineSchemaName)
 
         baseline_sql_sync = None
