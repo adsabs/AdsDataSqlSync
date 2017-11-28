@@ -88,7 +88,7 @@ class test_resolver(unittest.TestCase):
     def test_property_query1(self):
         with db_con.cursor() as cur:
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ARTICLE', 'ASSOCIATED', 'INSPIRE'])
+            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ASSOCIATED', 'ESOURCE', 'INSPIRE'])
 
 
     def test_property_query2(self):
@@ -100,7 +100,7 @@ class test_resolver(unittest.TestCase):
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
             cur.execute(self.config['DATALINKS_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            self.assertEqual(fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [''], 'item_count': 0, 'link_type': 'ARTICLE', 'link_sub_type': 'ADS_PDF'},
+            self.assertEqual(fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [''], 'item_count': 0, 'link_type': 'ESOURCE', 'link_sub_type': 'ADS_PDF'},
                                                                       {'url': ['1825AN......4..241B', '2010AN....331..852K'], 'title': ['Main Paper', 'Translation'], 'item_count': 0, 'link_type': 'ASSOCIATED', 'link_sub_type': 'NA'},
                                                                       {'url': [''], 'title': [''], 'item_count': 0, 'link_type': 'INSPIRE', 'link_sub_type': 'NA'}])
 

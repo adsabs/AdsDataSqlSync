@@ -28,7 +28,10 @@ class NonBib:
     """
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
-                  'reader', 'download', 'reference', 'reads', 'ned', 'datalinks')
+                 'reader', 'download', 'reference', 'reads', 'ned', 
+                 'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess', 
+                 'toc', 'private', 'ocrabstract', 
+                 'datalinks')
 
     def __init__(self, schema_='nonbib'):
         self.schema = schema_
@@ -147,11 +150,13 @@ class NonBib:
         column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
                         'boost', 'citation_count', 'read_count', 'norm_cites',
                         'readers', 'downloads', 'reads', 'reference', 'ned_objects')
-        for column_name in column_names:
-            sql_command = 'select count(*) from ' + self.schema \
-                + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
-                + ' where ' + self.schema + '.rowviewm.bibcode=' + baseline_schema + '.rowviewm.bibcode' \
-                + ' and ' + self.schema + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
+        #for column_name in column_names:
+        for column_name in self.all_type:
+            if column_name != 'canonical':
+                sql_command = 'select count(*) from ' + self.schema \
+                    + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
+                    + ' where ' + self.schema + '.rowviewm.bibcode=' + baseline_schema + '.rowviewm.bibcode' \
+                    + ' and ' + self.schema + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
 
             r = sess.execute(sql_command)
             m = 'number of {} different: {}'.format(column_name, r.scalar())
@@ -170,6 +175,14 @@ class NonBib:
                      Column('id', Integer),
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
+                     Column('ads_openaccess', Boolean),
+                     Column('author_openaccess', Boolean),
+                     Column('eprint_openaccess', Boolean),
+                     Column('pub_openaccess', Boolean),
+                     Column('openaccess', Boolean),
+                     Column('toc', Boolean),
+                     Column('private', Boolean),
+                     Column('ocrabstract', Boolean),
                      Column('simbad_objects', ARRAY(String)),
                      Column('ned_objects', ARRAY(String)),
                      Column('grants', ARRAY(String)),
@@ -262,6 +275,14 @@ class NonBib:
 	      id,         \
               coalesce(authors, ARRAY[]::text[]) as authors,    \
               coalesce(refereed, FALSE) as refereed,            \
+              coalesce(ads_openaccess, FALSE) as ads_openaccess,            \
+              coalesce(author_openaccess, FALSE) as author_openaccess,            \
+              coalesce(eprint_openaccess, FALSE) as eprint_openaccess,      \
+              coalesce(pub_openaccess, FALSE) as pub_openaccess,            \
+              coalesce(openaccess, FALSE) as openaccess,            \
+              coalesce(toc, FALSE) as toc,            \
+              coalesce(private, FALSE) as private,            \
+              coalesce(ocrabstract, FALSE) as ocrabstract,            \
               coalesce(simbad_objects, ARRAY[]::text[]) as simbad_objects,  \
               coalesce(ned_objects, ARRAY[]::text[]) as ned_objects,  \
               coalesce(grants, ARRAY[]::text[]) as grants,      \
@@ -276,6 +297,14 @@ class NonBib:
               coalesce(reads, ARRAY[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]) as reads \
        from {0}.Canonical natural left join {0}.Author \
        natural left join {0}.Refereed                 \
+       natural left join {0}.ads_openaccess           \
+       natural left join {0}.author_openaccess           \
+       natural left join {0}.eprint_openaccess        \
+       natural left join {0}.pub_openaccess           \
+       natural left join {0}.openaccess           \
+       natural left join {0}.toc           \
+       natural left join {0}.private           \
+       natural left join {0}.ocrabstract           \
        natural left join {0}.Simbad natural left join {0}.Grants \
        natural left join {0}.Citation  natural left join {0}.Ned   \
        natural left join {0}.Relevance natural left join {0}.Reader \
@@ -289,6 +318,14 @@ class NonBib:
          where {0}.RowViewM.bibcode={1}.RowViewM.bibcode  \
            and ({0}.RowViewM.authors!={1}.RowViewM.authors \
 	   or {0}.RowViewM.refereed!={1}.RowViewM.refereed \
+	   or {0}.RowViewM.ads_openaccess!={1}.RowViewM.ads_openaccess \
+	   or {0}.RowViewM.author_openaccess!={1}.RowViewM.author_openaccess \
+	   or {0}.RowViewM.eprint_openaccess!={1}.RowViewM.eprint_openaccess \
+	   or {0}.RowViewM.pub_openaccess!={1}.RowViewM.pub_openaccess \
+	   or {0}.RowViewM.openaccess!={1}.RowViewM.openaccess \
+	   or {0}.RowViewM.toc!={1}.RowViewM.toc \
+	   or {0}.RowViewM.private!={1}.RowViewM.private \
+	   or {0}.RowViewM.ocrabstract!={1}.RowViewM.ocrabstract \
 	   or {0}.RowViewM.simbad_objects!={1}.RowViewM.simbad_objects \
            or {0}.RowViewM.ned_objects!={1}.RowViewM.ned_objects \
 	   or {0}.RowViewM.grants!={1}.RowViewM.grants \

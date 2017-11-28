@@ -30,11 +30,27 @@ class test_rowview_ingest(unittest.TestCase):
         self.assertEqual(lines_in_file, bibcode_count, 'bibcode reader returned wrong number of lines')
     
     
-    def test_refereed_reader(self):  
-        """verify refereed reader adds True to every line"""
-        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['REFEREED']
+    def test_only_true_reader(self):  
+        """verify only true reader adds True to every line, test with refereed"""
+        for t in ('REFEREED', 'ADS_OPENACCESS', 'EPRINT_OPENACCESS', 'PUB_OPENACCESS'):
+            filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config[t]
+            lines_in_file = sum(1 for line in open(filename))
+            r = reader.OnlyTrueFileReader(filename)
+            bibcode_count = 0
+            line = r.read()
+            while line:
+                bibcode_count += 1
+                parts = line.split('\t')
+                self.assertEqual(2, len(parts), '{} lines should only include bibcode and T'.format(t))
+                self.assertEqual('T', parts[1].strip(), 'invalid value for {} field: {}'.format(t, parts[1]))
+                line = r.read()
+            r.close()
+            self.assertEqual(lines_in_file, bibcode_count, '{} reader returned wrong number of lines'.format(t))
+
+    def test_ads_openaccess(self):
+        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['ADS_OPENACCESS']
         lines_in_file = sum(1 for line in open(filename))
-        r = reader.RefereedFileReader(filename)
+        r = reader.OnlyTrueFileReader(filename)
         bibcode_count = 0
         line = r.read()
         while line:
@@ -187,8 +203,8 @@ class test_rowview_ingest(unittest.TestCase):
     def test_eprint_reader(self):
         """verify reference reader creates the correct sql array value"""
 
-        spot_checks = (('1825AN......4..241B', 'ARTICLE', 'EPRINT_HTML', '{"http://arxiv.org/abs/0908.1823"}', '{}'),
-                       ('1912NCim....3...93P', 'ARTICLE', 'EPRINT_HTML', '{"http://arxiv.org/abs/1002.1810"}', '{}')
+        spot_checks = (('1825AN......4..241B', 'ESOURCE', 'EPRINT_HTML', '{"http://arxiv.org/abs/0908.1823"}', '{}'),
+                       ('1912NCim....3...93P', 'ESOURCE', 'EPRINT_HTML', '{"http://arxiv.org/abs/1002.1810"}', '{}')
                        )
         self.datalinks_reader_test('datalinks', spot_checks, 'EPRINT_HTML')
 

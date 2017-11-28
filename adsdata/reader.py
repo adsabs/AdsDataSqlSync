@@ -78,10 +78,10 @@ class BibcodeFileReader(ADSClassicInputStream):
         return row
     
  
-class RefereedFileReader(ADSClassicInputStream):
-    """adds default True value for reading refereed column data file"""
+class OnlyTrueFileReader(ADSClassicInputStream):
+    """adds default True value when reading file with only bibcodes, e.g., refereed column data file"""
     def __init__(self, file_):
-        super(RefereedFileReader, self).__init__(file_)
+        super(OnlyTrueFileReader, self).__init__(file_)
         
     def process_line(self, line):
         bibcode = line[:-1]
