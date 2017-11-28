@@ -180,11 +180,12 @@ def add_data_link(session, current_row):
     result = session.execute(q)
     current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
 
+
+article_types = set(['eprint', 'article', 'inproceedings', 'inbook'])
 def is_article(property):
     """is the passed property value for an article or nonarticle
 
     passed an array of strings, the current property value for the bibcode"""
-    article_types = set(['eprint', 'article', 'inproceedings', 'inbook'])
     passed_types = set(property)
     i = passed_types.intersection(article_types)
     if len(i) > 0:
