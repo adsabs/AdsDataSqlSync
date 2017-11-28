@@ -17,11 +17,20 @@ from adsdata.tasks import task_output_results, task_output_metrics
 
 logger = None
 config = {}
+# fields needed from nonbib to compute master record
+nonbib_to_master_select_fields = ('bibcode', 'ads_openaccess', 'author_openaccess', 'boost', 'citation_count',
+                                  'eprint_openaccess', 'grants', 'ned_objects', 'norm_cites', 'ocrabstract',
+                                  'openaccess', 'private', 'pub_openaccess', 'read_count', 'readers', 'reference', 
+                                  'refereed', 'simbad_objects', 'toc')
 
-# non-link fields that are sent to master pipeline
+# select fields that are not sent to master
+nonbib_to_master_property_fields = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
+                                    'ocrabstract', 'openaccess', 'private', 'pub_openaccess', 
+                                    'refereed', 'toc')
 nonbib_to_master_fields = ('bibcode', 'boost', 'citation_count',
-                           'grants', 'ned_objects', 'norm_cites', 'read_count', 
-                           'readers', 'reference', 'simbad_objects')
+                           'eprint_openaccess', 'grants', 'ned_objects', 'norm_cites', 
+                           'read_count', 'readers', 'reference', 
+                           'simbad_objects')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
@@ -41,8 +50,9 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
             filename = config['DATA_PATH'] + config[t.upper()]
             if t == 'canonical':
                 r = reader.BibcodeFileReader(filename)
-            elif t == 'refereed':
-                r = reader.RefereedFileReader(filename)
+            elif t in ('refereed', 'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
+                       'pub_openaccess', 'toc', 'private', 'ocrabstract'):
+                r = reader.OnlyTrueFileReader(filename)
             else:
                 r = reader.StandardFileReader(t, filename)
             if r:
@@ -83,7 +93,7 @@ def load_column_files_datalinks_table(from_config, table_name, file_type, raw_co
 def nonbib_to_master_dict(row):
     """create dict using only nonbib fields sent to master in protobuf"""
     d = {}
-    for column in nonbib_to_master_fields:
+    for column in nonbib_to_master_select_fields:
         d[column] = getattr(row, column)
     return d
 
@@ -142,6 +152,21 @@ def add_data_link(session, current_row):
     q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['property'] = fetch_data_link_elements(result.fetchone())
+    # first, augment property field with article/nonartile, refereed/not refereed
+    if is_article(current_row['property']):
+        current_row['property'].append(u'ARTICLE')
+    else:
+        current_row['property'].append(u'NONARTICLE')
+    if current_row['refereed']:
+        current_row['property'].append(u'REFEREED')
+    else:
+        current_row['property'].append(u'NOT REFEREED')
+    # now augment the property field with many other boolean fields
+    extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
+                        'openaccess', 'toc', 'private', 'ocrabstract')
+    for p in extra_properties:
+        if current_row[p]:
+            current_row['property'].append(p.upper())
 
     q = config['ESOURCE_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
@@ -155,6 +180,23 @@ def add_data_link(session, current_row):
     result = session.execute(q)
     current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
 
+def is_article(property):
+    """is the passed property value for an article or nonarticle
+
+    passed an array of strings, the current property value for the bibcode"""
+    article_types = set(['eprint', 'article', 'inproceedings', 'inbook'])
+    passed_types = set(property)
+    i = passed_types.intersection(article_types)
+    if len(i) > 0:
+        return True
+    return False
+
+
+def cleanup_for_master(r):
+    """delete values from dict not needed by protobuf to master pipeline"""
+    for f in nonbib_to_master_property_fields:
+        r.pop(f, None)
+
 
 def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     """send all nonbib data to queue for delivery to master pipeline"""
@@ -165,10 +207,11 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     tmp = []
     i = 0
     max_rows = config['MAX_ROWS']
-    q = session.query(models.NonBibTable).options(load_only(*nonbib_to_master_fields))
+    q = session.query(models.NonBibTable).options(load_only(*nonbib_to_master_select_fields))
     for current_row in q.yield_per(100):
         current_row = nonbib_to_master_dict(current_row)
         add_data_link(session, current_row)
+        cleanup_for_master(current_row)
         rec = NonBibRecord(**current_row)
         tmp.append(rec._data)
         i += 1
@@ -203,9 +246,10 @@ def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
     n = nonbib.NonBib(schema)
     max_rows = config['MAX_ROWS']
     for current_delta in session.query(models.NonBibDeltaTable).yield_per(100):
-        row = n.get_by_bibcode(nonbib_engine, current_delta.bibcode, nonbib_to_master_fields)
+        row = n.get_by_bibcode(nonbib_engine, current_delta.bibcode, nonbib_to_master_select_fields)
         row = nonbib_to_master_dict(row)
         add_data_link(session, row)
+        cleanup_for_master(row)
         rec = NonBibRecord(**row)
         tmp.append(rec._data)
         i += 1
@@ -233,10 +277,11 @@ def nonbib_bibs_to_master_pipeline(nonbib_engine, schema, bibcodes):
     n = nonbib.NonBib(schema)
     tmp = [] 
     for bibcode in bibcodes:
-        row = n.get_by_bibcode(nonbib_engine, bibcode, nonbib_to_master_fields)
+        row = n.get_by_bibcode(nonbib_engine, bibcode, nonbib_to_master_select_fields)
         if row:
             row = nonbib_to_master_dict(row)
             add_data_link(session, row)
+            cleanup_for_master(row)
             rec = NonBibRecord(**row)
             tmp.append(rec._data)
         else:
