@@ -19,18 +19,14 @@ logger = None
 config = {}
 # fields needed from nonbib to compute master record
 nonbib_to_master_select_fields = ('bibcode', 'ads_openaccess', 'author_openaccess', 'boost', 'citation_count',
-                                  'eprint_openaccess', 'grants', 'ned_objects', 'norm_cites', 'ocrabstract',
+                                  'eprint_openaccess', 'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
                                   'openaccess', 'private', 'pub_openaccess', 'read_count', 'readers', 'reference', 
                                   'refereed', 'simbad_objects', 'toc')
 
-# select fields that are not sent to master
+# select fields that are not sent to master, they are used to compute solr property field
 nonbib_to_master_property_fields = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
-                                    'ocrabstract', 'openaccess', 'private', 'pub_openaccess', 
+                                    'nonarticle', 'ocrabstract', 'openaccess', 'private', 'pub_openaccess', 
                                     'refereed', 'toc')
-nonbib_to_master_fields = ('bibcode', 'boost', 'citation_count',
-                           'eprint_openaccess', 'grants', 'ned_objects', 'norm_cites', 
-                           'read_count', 'readers', 'reference', 
-                           'simbad_objects')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
@@ -51,7 +47,7 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
             if t == 'canonical':
                 r = reader.BibcodeFileReader(filename)
             elif t in ('refereed', 'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
-                       'pub_openaccess', 'toc', 'private', 'ocrabstract'):
+                       'pub_openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle'):
                 r = reader.OnlyTrueFileReader(filename)
             else:
                 r = reader.StandardFileReader(t, filename)
@@ -153,10 +149,10 @@ def add_data_link(session, current_row):
     result = session.execute(q)
     current_row['property'] = fetch_data_link_elements(result.fetchone())
     # first, augment property field with article/nonartile, refereed/not refereed
-    if is_article(current_row['property']):
-        current_row['property'].append(u'ARTICLE')
-    else:
+    if current_row['nonarticle']:
         current_row['property'].append(u'NONARTICLE')
+    else:
+        current_row['property'].append(u'ARTICLE')
     if current_row['refereed']:
         current_row['property'].append(u'REFEREED')
     else:
@@ -179,18 +175,6 @@ def add_data_link(session, current_row):
     q = config['DATALINKS_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
-
-
-article_types = set(['eprint', 'article', 'inproceedings', 'inbook'])
-def is_article(property):
-    """is the passed property value for an article or nonarticle
-
-    passed an array of strings, the current property value for the bibcode"""
-    passed_types = set(property)
-    i = passed_types.intersection(article_types)
-    if len(i) > 0:
-        return True
-    return False
 
 
 def cleanup_for_master(r):
