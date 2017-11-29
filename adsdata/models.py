@@ -30,6 +30,7 @@ class NonBibTable(Base):
     openaccess = Column(Boolean)
     toc = Column(Boolean)
     private = Column(Boolean)
+    nonarticle = Column(Boolean)
     ocrabstract = Column(Boolean)
     simbad_objects = Column(ARRAY(String))
     ned_objects = Column(ARRAY(String))
@@ -100,6 +101,11 @@ class PrivateTable(Base):
     __tablename__ = 'private'
     bibcode = Column(String, primary_key=True)
     private = Column(Boolean)
+
+class NonArticleTable(Base):
+    __tablename__ = 'nonarticle'
+    bibcode = Column(String, primary_key=True)
+    nonarticle = Column(Boolean)
 
 class OcrAbstractTable(Base):
     __tablename__ = 'ocrabstract'
@@ -179,7 +185,7 @@ class DataLinksTable(Base):
 column_tables = (CanonicalTable, AuthorTable, RefereedTable, SimbadTable, NedTable,
                  GrantsTable, CitationTable, RelevanceTable, ReaderTable, DownloadTable, ReadsTable, ReferenceTable,
                  ChangedTable, DataLinksTable, AdsOpenAccessTable, AuthorOpenAccessTable, EprintOpenAccessTable,
-                 PubOpenAccessTable, OpenAccessTable, TocTable, PrivateTable, OcrAbstractTable)
+                 PubOpenAccessTable, OpenAccessTable, TocTable, PrivateTable, NonArticleTable, OcrAbstractTable)
 
 
 class MetricsTable(Base):

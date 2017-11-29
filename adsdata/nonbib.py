@@ -30,7 +30,7 @@ class NonBib:
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                  'reader', 'download', 'reference', 'reads', 'ned', 
                  'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess', 
-                 'toc', 'private', 'ocrabstract', 
+                 'toc', 'private', 'ocrabstract', 'nonarticle',
                  'datalinks')
 
     def __init__(self, schema_='nonbib'):
@@ -150,8 +150,7 @@ class NonBib:
         column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
                         'boost', 'citation_count', 'read_count', 'norm_cites',
                         'readers', 'downloads', 'reads', 'reference', 'ned_objects')
-        #for column_name in column_names:
-        for column_name in self.all_type:
+        for column_name in column_names:
             if column_name != 'canonical':
                 sql_command = 'select count(*) from ' + self.schema \
                     + '.rowviewm, ' + baseline_schema + '.rowviewm ' \
@@ -182,6 +181,7 @@ class NonBib:
                      Column('openaccess', Boolean),
                      Column('toc', Boolean),
                      Column('private', Boolean),
+                     Column('nonarticle', Boolean),
                      Column('ocrabstract', Boolean),
                      Column('simbad_objects', ARRAY(String)),
                      Column('ned_objects', ARRAY(String)),
@@ -282,6 +282,7 @@ class NonBib:
               coalesce(openaccess, FALSE) as openaccess,            \
               coalesce(toc, FALSE) as toc,            \
               coalesce(private, FALSE) as private,            \
+              coalesce(nonarticle, FALSE) as nonarticle,            \
               coalesce(ocrabstract, FALSE) as ocrabstract,            \
               coalesce(simbad_objects, ARRAY[]::text[]) as simbad_objects,  \
               coalesce(ned_objects, ARRAY[]::text[]) as ned_objects,  \
@@ -304,6 +305,7 @@ class NonBib:
        natural left join {0}.openaccess           \
        natural left join {0}.toc           \
        natural left join {0}.private           \
+       natural left join {0}.nonarticle           \
        natural left join {0}.ocrabstract           \
        natural left join {0}.Simbad natural left join {0}.Grants \
        natural left join {0}.Citation  natural left join {0}.Ned   \
@@ -325,6 +327,7 @@ class NonBib:
 	   or {0}.RowViewM.openaccess!={1}.RowViewM.openaccess \
 	   or {0}.RowViewM.toc!={1}.RowViewM.toc \
 	   or {0}.RowViewM.private!={1}.RowViewM.private \
+	   or {0}.RowViewM.nonarticle!={1}.RowViewM.nonarticle \
 	   or {0}.RowViewM.ocrabstract!={1}.RowViewM.ocrabstract \
 	   or {0}.RowViewM.simbad_objects!={1}.RowViewM.simbad_objects \
            or {0}.RowViewM.ned_objects!={1}.RowViewM.ned_objects \
