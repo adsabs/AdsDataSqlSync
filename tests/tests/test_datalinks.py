@@ -96,7 +96,7 @@ class test_resolver(unittest.TestCase):
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
             self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
-    def test_property(self):
+    def test_extra_property_values(self):
         current_row = {}
         current_row['property'] = []
         extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
@@ -106,16 +106,7 @@ class test_resolver(unittest.TestCase):
         for p, c in zip(extra_properties, extra_properties_cond):
             current_row[p] = c
         current_row = add_data_link_extra_properties(current_row)
-        self.assertTrue('ads_openaccess'.upper() in current_row['property'])
-        self.assertFalse('author_openaccess'.upper() in current_row['property'])
-        self.assertTrue('eprint_openaccess'.upper() in current_row['property'])
-        self.assertFalse('pub_openaccess'.upper() in current_row['property'])
-        self.assertTrue('openaccess'.upper() in current_row['property'])
-        self.assertFalse('toc'.upper() in current_row['property'])
-        self.assertTrue('private'.upper() in current_row['property'])
-        self.assertFalse('ocrabstract'.upper() in current_row['property'])
-        self.assertTrue('nonarticle'.upper() in current_row['property'])
-        self.assertTrue('refereed'.upper() in current_row['property'])
+        self.assertEqual(current_row['property'], [u'NONARTICLE', u'REFEREED', 'ADS_OPENACCESS', 'EPRINT_OPENACCESS', 'OPENACCESS', 'PRIVATE'])
 
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
