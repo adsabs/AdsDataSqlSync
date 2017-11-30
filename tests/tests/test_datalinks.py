@@ -10,7 +10,7 @@ import psycopg2
 import testing.postgresql
 
 from adsputils import load_config
-from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record
+from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record, add_data_link_extra_properties
 
 class test_resolver(unittest.TestCase):
     """tests for generation of resolver"""
@@ -96,6 +96,26 @@ class test_resolver(unittest.TestCase):
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
             self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
+    def test_property(self):
+        current_row = {}
+        current_row['property'] = []
+        extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
+                            'openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle', 'refereed')
+        extra_properties_cond = (True, False, True, False,
+                                 True, False, True, False, True, True)
+        for p, c in zip(extra_properties, extra_properties_cond):
+            current_row[p] = c
+        current_row = add_data_link_extra_properties(current_row)
+        self.assertTrue('ads_openaccess'.upper() in current_row['property'])
+        self.assertFalse('author_openaccess'.upper() in current_row['property'])
+        self.assertTrue('eprint_openaccess'.upper() in current_row['property'])
+        self.assertFalse('pub_openaccess'.upper() in current_row['property'])
+        self.assertTrue('openaccess'.upper() in current_row['property'])
+        self.assertFalse('toc'.upper() in current_row['property'])
+        self.assertTrue('private'.upper() in current_row['property'])
+        self.assertFalse('ocrabstract'.upper() in current_row['property'])
+        self.assertTrue('nonarticle'.upper() in current_row['property'])
+        self.assertTrue('refereed'.upper() in current_row['property'])
 
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
