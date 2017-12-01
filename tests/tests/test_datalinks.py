@@ -96,17 +96,53 @@ class test_resolver(unittest.TestCase):
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
             self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
-    def test_extra_property_values(self):
+    def test_extra_property_values1(self):
         current_row = {}
         current_row['property'] = []
+        # have article and refereed
+        current_row['nonarticle'] = False
+        current_row['refereed'] = True
+
         extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
-                            'openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle', 'refereed')
+                            'openaccess', 'toc', 'private', 'ocrabstract')
         extra_properties_cond = (True, False, True, False,
-                                 True, False, True, False, True, True)
+                                 True, False, True, False)
         for p, c in zip(extra_properties, extra_properties_cond):
             current_row[p] = c
         current_row = add_data_link_extra_properties(current_row)
-        self.assertEqual(current_row['property'], [u'NONARTICLE', u'REFEREED', 'ADS_OPENACCESS', 'EPRINT_OPENACCESS', 'OPENACCESS', 'PRIVATE'])
+        self.assertEqual(current_row['property'], ['ARTICLE', 'REFEREED', 'ADS_OPENACCESS', 'EPRINT_OPENACCESS', 'OPENACCESS', 'PRIVATE'])
+
+    def test_extra_property_values2(self):
+        current_row = {}
+        current_row['property'] = []
+        # have article and refereed
+        current_row['nonarticle'] = True
+        current_row['refereed'] = True
+
+        extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
+                            'openaccess', 'toc', 'private', 'ocrabstract')
+        extra_properties_cond = (False, False, False, False,
+                                 False, True, True, True)
+        for p, c in zip(extra_properties, extra_properties_cond):
+            current_row[p] = c
+        current_row = add_data_link_extra_properties(current_row)
+        self.assertEqual(current_row['property'], ['NONARTICLE', 'REFEREED', 'TOC', 'PRIVATE', 'OCRABSTRACT'])
+
+    def test_extra_property_values3(self):
+        current_row = {}
+        current_row['property'] = []
+        # have article and refereed
+        current_row['nonarticle'] = True
+        current_row['refereed'] = False
+
+        extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
+                            'openaccess', 'toc', 'private', 'ocrabstract')
+        extra_properties_cond = (False, True, False, True,
+                                 False, True, False, True)
+        for p, c in zip(extra_properties, extra_properties_cond):
+            current_row[p] = c
+        current_row = add_data_link_extra_properties(current_row)
+        self.assertEqual(current_row['property'], ['NONARTICLE', 'NOT REFEREED', 'AUTHOR_OPENACCESS', 'PUB_OPENACCESS', 'TOC', 'OCRABSTRACT'])
 
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
