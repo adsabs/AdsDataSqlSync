@@ -10,7 +10,7 @@ import psycopg2
 import testing.postgresql
 
 from adsputils import load_config
-from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record
+from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record, add_data_link_extra_properties
 
 class test_resolver(unittest.TestCase):
     """tests for generation of resolver"""
@@ -96,6 +96,20 @@ class test_resolver(unittest.TestCase):
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
             self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
+    def test_extra_property_values(self):
+        current_row = {}
+        extra_properties = [{'ads_openaccess':True, 'author_openaccess':True, 'eprint_openaccess':True, 'pub_openaccess':True,
+                            'openaccess':True, 'toc':False, 'private':False, 'ocrabstract':False, 'nonarticle':True, 'refereed':True},
+                            {'ads_openaccess':False, 'author_openaccess':False, 'eprint_openaccess':False, 'pub_openaccess':False,
+                            'openaccess':False, 'toc':True, 'private':True, 'ocrabstract':True, 'nonarticle':False, 'refereed':False}]
+        results = [['NONARTICLE', 'REFEREED', 'ADS_OPENACCESS', 'AUTHOR_OPENACCESS', 'EPRINT_OPENACCESS', 'PUB_OPENACCESS', 'OPENACCESS'],
+                   ['ARTICLE', 'NOT REFEREED', 'TOC', 'PRIVATE', 'OCRABSTRACT']]
+        for extra_property, result in zip(extra_properties, results):
+            current_row['property'] = []
+            for key, value in extra_property.iteritems():
+                current_row[key] = value
+            current_row = add_data_link_extra_properties(current_row)
+            self.assertEqual(current_row['property'], result)
 
     def test_datalinks_query(self):
         with db_con.cursor() as cur:

@@ -141,13 +141,7 @@ def fetch_data_link_record(query_result):
         results.append(dict(zip(columns, fieldList)))
     return results
 
-
-def add_data_link(session, current_row):
-    """populate property, esource, data, total_link_counts, and data_links_rows fields"""
-
-    q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
-    result = session.execute(q)
-    current_row['property'] = fetch_data_link_elements(result.fetchone())
+def add_data_link_extra_properties(current_row):
     # first, augment property field with article/nonartile, refereed/not refereed
     if current_row['nonarticle']:
         current_row['property'].append(u'NONARTICLE')
@@ -163,6 +157,15 @@ def add_data_link(session, current_row):
     for p in extra_properties:
         if current_row[p]:
             current_row['property'].append(p.upper())
+    return current_row
+
+def add_data_link(session, current_row):
+    """populate property, esource, data, total_link_counts, and data_links_rows fields"""
+
+    q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
+    result = session.execute(q)
+    current_row['property'] = fetch_data_link_elements(result.fetchone())
+    current_row = add_data_link_extra_properties(current_row)
 
     q = config['ESOURCE_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
