@@ -143,7 +143,7 @@ class NonBib:
         sess = Session(bind=db_conn)
         sql_command = 'select count(*) from ' + self.schema + '.changedrowsm'
         r = sess.execute(sql_command)
-        m = 'total number of changed bibcodes: {}'.format(r.scalar())
+        m = 'nonbib delta, total number of changed bibcodes: {}'.format(r.scalar())
         print m
         self.logger.info(m)
         
@@ -158,7 +158,7 @@ class NonBib:
                     + ' and ' + self.schema + '.rowviewm.' + column_name + '!=' + baseline_schema + '.rowviewm.' + column_name+ ';'
 
             r = sess.execute(sql_command)
-            m = 'number of {} different: {}'.format(column_name, r.scalar())
+            m = 'nonbib delta, number of {} different: {}'.format(column_name, r.scalar())
             print m
             self.logger.info(m)
         sess.commit()
