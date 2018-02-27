@@ -1,4 +1,4 @@
-git+https://github.com/adsabs/ADSPipelineUtils.git@master
+git+https://github.com/adsabs/ADSPipelineUtils.git@v1.0.1
 alembic==0.9.1
 cachetools==1.1.5
 librabbitmq==1.6.1
