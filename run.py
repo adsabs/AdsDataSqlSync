@@ -92,10 +92,7 @@ def nonbib_to_master_dict(row):
     for column in nonbib_to_master_select_fields:
         d[column] = getattr(row, column)
     author_count = len(getattr(row, 'authors', ()))
-    if author_count == 0:
-        d['citation_count_norm'] = 1
-    else:
-        d['citation_count_norm'] = getattr(row, 'citation_count', 0) / float(author_count)
+    d['citation_count_norm'] = getattr(row, 'citation_count', 0) / float(max(author_count, 1))
     return d
 
 

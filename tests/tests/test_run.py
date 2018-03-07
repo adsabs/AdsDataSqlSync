@@ -27,7 +27,7 @@ class test_run(unittest.TestCase):
         row.citation_count = 5
         row.bibcode = 'testbib'
         d = nonbib_to_master_dict(row)
-        self.assertEqual(1, d['citation_count_norm'])
+        self.assertEqual(row.citation_count, d['citation_count_norm'])
         self.assertEqual('testbib', d['bibcode'])
         
         row.authors = ['foo', 'bar']
