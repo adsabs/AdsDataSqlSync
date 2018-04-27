@@ -127,20 +127,14 @@ def fetch_data_link_elements_counts(query_result):
 def fetch_data_link_record(query_result):
     # since I want to use this function from the test side,
     # I was not able to use the elegant function row2dict function
-    columns = ('link_type', 'link_sub_type', 'url', 'title', 'item_count')
+    # convert query results to a list of dicts 
+    columns = ['link_type', 'link_sub_type', 'url', 'title', 'item_count']
     results = []
     for row in query_result:
-        fieldList = []
+        d = {}
         for i, field in enumerate(row):
-            toList = []
-            if columns[i] in ('url', 'title'):
-                many = ''.join(field).lstrip('{').rstrip('}').replace('"','').split(',')
-                for one in many:
-                    toList.append(one)
-                fieldList.append(toList)
-            else:
-                fieldList.append(field)
-        results.append(dict(zip(columns, fieldList)))
+            d[columns[i]] = field
+        results.append(d)
     return results
 
 def add_data_link_extra_properties(current_row):

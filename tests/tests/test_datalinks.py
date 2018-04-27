@@ -47,6 +47,7 @@ class test_resolver(unittest.TestCase):
             # Create the initial database structure (roles, schemas, tables etc.)
             # basically anything that doesn't change
             cur.execute(self.slurp('tests/data/datalinks.sql'))
+        self.maxDiff = None
 
     def tearDown(self):
         """ Called after all of the tests in this file have been executed to close
@@ -114,9 +115,16 @@ class test_resolver(unittest.TestCase):
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
             cur.execute(self.config['DATALINKS_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            self.assertEqual(fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [''], 'item_count': 0, 'link_type': 'ESOURCE', 'link_sub_type': 'ADS_PDF'},
-                                                                      {'url': ['1825AN......4..241B', '2010AN....331..852K'], 'title': ['Main Paper', 'Translation'], 'item_count': 0, 'link_type': 'ASSOCIATED', 'link_sub_type': 'NA'},
-                                                                      {'url': [''], 'title': [''], 'item_count': 0, 'link_type': 'INSPIRE', 'link_sub_type': 'NA'}])
+            rec = fetch_data_link_record(cur.fetchall())
+            expected = [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'],
+                         'title': [], 'item_count': 0, 'link_type': 'ESOURCE',
+                         'link_sub_type': 'ADS_PDF'},
+                        {'url': ['1825AN......4..241B', '2010AN....331..852K'],
+                         'title': ['Main Paper', 'Translation'], 'item_count': 0,
+                         'link_type': 'ASSOCIATED', 'link_sub_type': 'NA'},
+                        {'url': [], 'title': [], 'item_count': 0, 'link_type': 'INSPIRE',
+                         'link_sub_type': 'NA'}]
+            self.assertEqual(rec, expected)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
