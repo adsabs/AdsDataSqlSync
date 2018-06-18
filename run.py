@@ -46,8 +46,7 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
             filename = config['DATA_PATH'] + config[t.upper()]
             if t == 'canonical':
                 r = reader.BibcodeFileReader(filename)
-            elif t in ('refereed', 'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
-                       'pub_openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle'):
+            elif t in ('refereed', 'pub_openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle'):
                 r = reader.OnlyTrueFileReader(filename)
             else:
                 r = reader.StandardFileReader(t, filename)
@@ -148,11 +147,21 @@ def add_data_link_extra_properties(current_row):
     else:
         current_row['property'].append(u'NOT REFEREED')
     # now augment the property field with many other boolean fields
-    extra_properties = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess',
-                        'openaccess', 'toc', 'private', 'ocrabstract')
+    extra_properties = ('pub_openaccess', 'toc', 'private', 'ocrabstract')
     for p in extra_properties:
         if current_row[p]:
             current_row['property'].append(p.upper())
+    # these property fields are set from availability of url
+    extra_properties_link_type = {'ADS_PDF':'ADS_OPENACCESS', 'ADS_SCAN':'ADS_OPENACCESS',
+                                  'AUTHOR_PDF':'AUTHOR_OPENACCESS', 'AUTHOR_HTML':'AUTHOR_OPENACCESS',
+                                  'EPRINT_PDF':'EPRINT_OPENACCESS', 'EPRINT_HTML':'EPRINT_OPENACCESS'}
+    for key,value in extra_properties_link_type.iteritems():
+        if key in current_row['esource']:
+            current_row['property'].append(value)
+    # see if there is any of *_openaccess flags set, if so set the generic openaccess flag
+    if ('ADS_OPENACCESS' in current_row['property']) or ('AUTHOR_OPENACCESS' in current_row['property']) or \
+       ('EPRINT_OPENACCESS' in current_row['property']) or ('ADS_OPENACCESS' in current_row['property']):
+       current_row['property'].append('OPENACCESS')
     return current_row
 
 def add_data_link(session, current_row):
@@ -161,11 +170,12 @@ def add_data_link(session, current_row):
     q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['property'] = fetch_data_link_elements(result.fetchone())
-    current_row = add_data_link_extra_properties(current_row)
 
     q = config['ESOURCE_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)
     current_row['esource'] = fetch_data_link_elements(result.fetchone())
+
+    current_row = add_data_link_extra_properties(current_row)
 
     q = config['DATA_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
     result = session.execute(q)

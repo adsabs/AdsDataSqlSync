@@ -99,16 +99,19 @@ class test_resolver(unittest.TestCase):
 
     def test_extra_property_values(self):
         current_row = {}
-        extra_properties = [{'ads_openaccess':True, 'author_openaccess':True, 'eprint_openaccess':True, 'pub_openaccess':True,
-                            'openaccess':True, 'toc':False, 'private':False, 'ocrabstract':False, 'nonarticle':True, 'refereed':True},
-                            {'ads_openaccess':False, 'author_openaccess':False, 'eprint_openaccess':False, 'pub_openaccess':False,
-                            'openaccess':False, 'toc':True, 'private':True, 'ocrabstract':True, 'nonarticle':False, 'refereed':False}]
-        results = [['NONARTICLE', 'REFEREED', 'ADS_OPENACCESS', 'AUTHOR_OPENACCESS', 'EPRINT_OPENACCESS', 'PUB_OPENACCESS', 'OPENACCESS'],
+        extra_properties = [{'pub_openaccess':True, 'toc':False, 'private':False, 'ocrabstract':False,
+                             'nonarticle':True, 'refereed':True},
+                            {'pub_openaccess':False, 'toc':True, 'private':True, 'ocrabstract':True,
+                             'nonarticle':False, 'refereed':False}]
+        results = [['NONARTICLE', 'REFEREED', 'PUB_OPENACCESS', 'ADS_OPENACCESS', 'AUTHOR_OPENACCESS', 'EPRINT_OPENACCESS', 'OPENACCESS'],
                    ['ARTICLE', 'NOT REFEREED', 'TOC', 'PRIVATE', 'OCRABSTRACT']]
-        for extra_property, result in zip(extra_properties, results):
+        esources = [['ADS_PDF', 'AUTHOR_PDF', 'EPRINT_HTML'],
+                   []]
+        for extra_property, result, esource in zip(extra_properties, results, esources):
             current_row['property'] = []
             for key, value in extra_property.iteritems():
                 current_row[key] = value
+            current_row['esource'] = esource
             current_row = add_data_link_extra_properties(current_row)
             self.assertEqual(current_row['property'], result)
 
