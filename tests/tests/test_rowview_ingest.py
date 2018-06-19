@@ -32,7 +32,7 @@ class test_rowview_ingest(unittest.TestCase):
     
     def test_only_true_reader(self):  
         """verify only true reader adds True to every line, test with refereed"""
-        for t in ('REFEREED', 'ADS_OPENACCESS', 'EPRINT_OPENACCESS', 'PUB_OPENACCESS'):
+        for t in ('REFEREED', 'PUB_OPENACCESS'):
             filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config[t]
             lines_in_file = sum(1 for line in open(filename))
             r = reader.OnlyTrueFileReader(filename)
@@ -47,8 +47,8 @@ class test_rowview_ingest(unittest.TestCase):
             r.close()
             self.assertEqual(lines_in_file, bibcode_count, '{} reader returned wrong number of lines'.format(t))
 
-    def test_ads_openaccess(self):
-        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['ADS_OPENACCESS']
+    def test_pub_openaccess(self):
+        filename = self.config['TEST_DATA_PATH'] + 'data1/' + self.config['PUB_OPENACCESS']
         lines_in_file = sum(1 for line in open(filename))
         r = reader.OnlyTrueFileReader(filename)
         bibcode_count = 0
