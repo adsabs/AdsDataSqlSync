@@ -29,7 +29,7 @@ class NonBib:
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                  'reader', 'download', 'reference', 'reads', 'ned', 
-                 'openaccess', 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess', 
+                 'ads_openaccess', 'author_openaccess', 'eprint_openaccess', 'pub_openaccess', 
                  'toc', 'private', 'ocrabstract', 'nonarticle',
                  'datalinks')
 
