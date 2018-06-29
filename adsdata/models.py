@@ -23,11 +23,7 @@ class NonBibTable(Base):
     id = Column(Integer)
     authors = Column(ARRAY(String))
     refereed = Column(Boolean)
-    ads_openaccess = Column(Boolean)
-    author_openaccess = Column(Boolean)
-    eprint_openaccess = Column(Boolean)
     pub_openaccess = Column(Boolean)
-    openaccess = Column(Boolean)
     toc = Column(Boolean)
     private = Column(Boolean)
     nonarticle = Column(Boolean)
@@ -67,30 +63,10 @@ class RefereedTable(Base):
     bibcode = Column(String, primary_key=True)
     refereed = Column(Boolean)
 
-class AdsOpenAccessTable(Base):
-    __tablename__ = 'ads_openaccess'
-    bibcode = Column(String, primary_key=True)
-    ads_openaccess = Column(Boolean)
-
-class AuthorOpenAccessTable(Base):
-    __tablename__ = 'author_openaccess'
-    bibcode = Column(String, primary_key=True)
-    author_openaccess = Column(Boolean)
-
-class EprintOpenAccessTable(Base):
-    __tablename__ = 'eprint_openaccess'
-    bibcode = Column(String, primary_key=True)
-    eprint_openaccess = Column(Boolean)
-
 class PubOpenAccessTable(Base):
     __tablename__ = 'pub_openaccess'
     bibcode = Column(String, primary_key=True)
     pub_openaccess = Column(Boolean)
-
-class OpenAccessTable(Base):
-    __tablename__ = 'openaccess'
-    bibcode = Column(String, primary_key=True)
-    openaccess = Column(Boolean)
 
 class TocTable(Base):
     __tablename__ = 'toc'
@@ -184,8 +160,7 @@ class DataLinksTable(Base):
 
 column_tables = (CanonicalTable, AuthorTable, RefereedTable, SimbadTable, NedTable,
                  GrantsTable, CitationTable, RelevanceTable, ReaderTable, DownloadTable, ReadsTable, ReferenceTable,
-                 ChangedTable, DataLinksTable, AdsOpenAccessTable, AuthorOpenAccessTable, EprintOpenAccessTable,
-                 PubOpenAccessTable, OpenAccessTable, TocTable, PrivateTable, NonArticleTable, OcrAbstractTable)
+                 ChangedTable, DataLinksTable, PubOpenAccessTable, TocTable, PrivateTable, NonArticleTable, OcrAbstractTable)
 
 
 class MetricsTable(Base):

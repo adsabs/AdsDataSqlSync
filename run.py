@@ -160,7 +160,7 @@ def add_data_link_extra_properties(current_row):
             current_row['property'].append(value)
     # see if there is any of *_openaccess flags set, if so set the generic openaccess flag
     if ('ADS_OPENACCESS' in current_row['property']) or ('AUTHOR_OPENACCESS' in current_row['property']) or \
-       ('EPRINT_OPENACCESS' in current_row['property']) or ('ADS_OPENACCESS' in current_row['property']):
+       ('EPRINT_OPENACCESS' in current_row['property']) or ('PUB_OPENACCESS' in current_row['property']):
        current_row['property'].append('OPENACCESS')
     return current_row
 
