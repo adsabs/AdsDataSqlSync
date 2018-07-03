@@ -18,14 +18,13 @@ from adsdata.tasks import task_output_results, task_output_metrics
 logger = None
 config = {}
 # fields needed from nonbib to compute master record
-nonbib_to_master_select_fields = ('bibcode', 'ads_openaccess', 'author_openaccess', 'boost', 'citation_count',
-                                  'eprint_openaccess', 'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
-                                  'openaccess', 'private', 'pub_openaccess', 'read_count', 'readers', 'reference', 
+nonbib_to_master_select_fields = ('bibcode', 'boost', 'citation_count',
+                                  'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
+                                  'private', 'pub_openaccess', 'read_count', 'readers', 'reference',
                                   'refereed', 'simbad_objects', 'toc')
 
 # select fields that are not sent to master, they are used to compute solr property field
-nonbib_to_master_property_fields = ('ads_openaccess', 'author_openaccess', 'eprint_openaccess', 
-                                    'nonarticle', 'ocrabstract', 'openaccess', 'private', 'pub_openaccess', 
+nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub_openaccess',
                                     'refereed', 'toc')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
@@ -160,7 +159,7 @@ def add_data_link_extra_properties(current_row):
             current_row['property'].append(value)
     # see if there is any of *_openaccess flags set, if so set the generic openaccess flag
     if ('ADS_OPENACCESS' in current_row['property']) or ('AUTHOR_OPENACCESS' in current_row['property']) or \
-       ('EPRINT_OPENACCESS' in current_row['property']) or ('ADS_OPENACCESS' in current_row['property']):
+       ('EPRINT_OPENACCESS' in current_row['property']) or ('PUB_OPENACCESS' in current_row['property']):
        current_row['property'].append('OPENACCESS')
     return current_row
 
