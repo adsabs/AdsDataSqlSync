@@ -577,6 +577,16 @@ def main():
     elif args.command == 'nonbibToMasterPipeline' and args.bibcodes:
         bibcodes = args.bibcodes.split(',')
         nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
+    elif args.command == 'nonbibToMasterPipeline' and args.filename:
+        bibcodes = []
+        with open(args.filename, 'r') as f:
+            for line in f:
+                bibcodes.append(line.strip())
+                if len(bibcodes) > 100:
+                    nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
+                    bibcodes = []
+        if len(bibcodes) > 0:
+            nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
     elif args.command == 'nonbibToMasterPipeline':
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'nonbibDeltaToMasterPipeline':
