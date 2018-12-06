@@ -29,7 +29,7 @@ class NonBib:
 
     all_types = ('canonical', 'author', 'refereed', 'simbad', 'grants', 'citation', 'relevance',
                  'reader', 'download', 'reference', 'reads', 'ned', 'pub_openaccess',
-                 'toc', 'private', 'ocrabstract', 'nonarticle',
+                 'private', 'ocrabstract', 'nonarticle',
                  'datalinks')
 
     def __init__(self, schema_='nonbib'):
@@ -174,7 +174,6 @@ class NonBib:
                      Column('authors', ARRAY(String)),
                      Column('refereed', Boolean),
                      Column('pub_openaccess', Boolean),
-                     Column('toc', Boolean),
                      Column('private', Boolean),
                      Column('nonarticle', Boolean),
                      Column('ocrabstract', Boolean),
@@ -271,7 +270,6 @@ class NonBib:
               coalesce(authors, ARRAY[]::text[]) as authors,    \
               coalesce(refereed, FALSE) as refereed,            \
               coalesce(pub_openaccess, FALSE) as pub_openaccess,            \
-              coalesce(toc, FALSE) as toc,            \
               coalesce(private, FALSE) as private,            \
               coalesce(nonarticle, FALSE) as nonarticle,            \
               coalesce(ocrabstract, FALSE) as ocrabstract,            \
@@ -290,7 +288,6 @@ class NonBib:
        from {0}.Canonical natural left join {0}.Author \
        natural left join {0}.Refereed                 \
        natural left join {0}.pub_openaccess           \
-       natural left join {0}.toc           \
        natural left join {0}.private           \
        natural left join {0}.nonarticle           \
        natural left join {0}.ocrabstract           \
@@ -308,7 +305,6 @@ class NonBib:
            and ({0}.RowViewM.authors!={1}.RowViewM.authors \
 	   or {0}.RowViewM.refereed!={1}.RowViewM.refereed \
 	   or {0}.RowViewM.pub_openaccess!={1}.RowViewM.pub_openaccess \
-	   or {0}.RowViewM.toc!={1}.RowViewM.toc \
 	   or {0}.RowViewM.private!={1}.RowViewM.private \
 	   or {0}.RowViewM.nonarticle!={1}.RowViewM.nonarticle \
 	   or {0}.RowViewM.ocrabstract!={1}.RowViewM.ocrabstract \
