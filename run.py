@@ -21,11 +21,11 @@ config = {}
 nonbib_to_master_select_fields = ('bibcode', 'boost', 'citation_count',
                                   'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
                                   'private', 'pub_openaccess', 'read_count', 'readers', 'reference',
-                                  'refereed', 'simbad_objects', 'toc')
+                                  'refereed', 'simbad_objects')
 
 # select fields that are not sent to master, they are used to compute solr property field
 nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub_openaccess',
-                                    'refereed', 'toc')
+                                    'refereed')
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
@@ -45,7 +45,7 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
             filename = config['DATA_PATH'] + config[t.upper()]
             if t == 'canonical':
                 r = reader.BibcodeFileReader(filename)
-            elif t in ('refereed', 'pub_openaccess', 'toc', 'private', 'ocrabstract', 'nonarticle'):
+            elif t in ('refereed', 'pub_openaccess', 'private', 'ocrabstract', 'nonarticle'):
                 r = reader.OnlyTrueFileReader(filename)
             else:
                 r = reader.StandardFileReader(t, filename)

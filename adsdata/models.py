@@ -24,7 +24,6 @@ class NonBibTable(Base):
     authors = Column(ARRAY(String))
     refereed = Column(Boolean)
     pub_openaccess = Column(Boolean)
-    toc = Column(Boolean)
     private = Column(Boolean)
     nonarticle = Column(Boolean)
     ocrabstract = Column(Boolean)
@@ -67,11 +66,6 @@ class PubOpenAccessTable(Base):
     __tablename__ = 'pub_openaccess'
     bibcode = Column(String, primary_key=True)
     pub_openaccess = Column(Boolean)
-
-class TocTable(Base):
-    __tablename__ = 'toc'
-    bibcode = Column(String, primary_key=True)
-    toc = Column(Boolean)
 
 class PrivateTable(Base):
     __tablename__ = 'private'
@@ -160,7 +154,7 @@ class DataLinksTable(Base):
 
 column_tables = (CanonicalTable, AuthorTable, RefereedTable, SimbadTable, NedTable,
                  GrantsTable, CitationTable, RelevanceTable, ReaderTable, DownloadTable, ReadsTable, ReferenceTable,
-                 ChangedTable, DataLinksTable, PubOpenAccessTable, TocTable, PrivateTable, NonArticleTable, OcrAbstractTable)
+                 ChangedTable, DataLinksTable, PubOpenAccessTable, PrivateTable, NonArticleTable, OcrAbstractTable)
 
 
 class MetricsTable(Base):

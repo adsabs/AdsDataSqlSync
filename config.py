@@ -26,7 +26,6 @@ REFEREED = 'config/links/refereed/all.links'
 REFERENCE = 'config/links/reference/all.links'
 RELEVANCE = 'config/links/relevance/docmetrics.tab'
 SIMBAD = 'config/links/simbad/simbad_objects.tab'
-TOC = 'config/links/toc/all.links'
 DATALINKS = ['config/links/facet_datasources/datasources.links,DATA',
             'config/links/electr/all.links,ESOURCE,PUB_HTML', # EJOURNAL
             'config/links/eprint_html/all.links,ESOURCE,EPRINT_HTML', # PREPRINT
@@ -39,7 +38,8 @@ DATALINKS = ['config/links/facet_datasources/datasources.links,DATA',
             'config/links/associated/all.links,ASSOCIATED',
             'config/links/video/all.links,PRESENTATION',
             'config/links/library/all.links,LIBRARYCATALOG',
-            'config/links/spires/all.links,INSPIRE']
+            'config/links/spires/all.links,INSPIRE',
+            'config/links/toc/all.links,TOC']
             # Note that we have NED and SIMBAND data files but they have been added to datasources file
             # and hence no need to read their individual files anymore, to add to linksdata table
             # 'config/links/ned/all.links,NED',
