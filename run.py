@@ -155,7 +155,7 @@ def add_data_link_extra_properties(current_row):
                                   'AUTHOR_PDF':'AUTHOR_OPENACCESS', 'AUTHOR_HTML':'AUTHOR_OPENACCESS',
                                   'EPRINT_PDF':'EPRINT_OPENACCESS', 'EPRINT_HTML':'EPRINT_OPENACCESS'}
     for key,value in extra_properties_link_type.iteritems():
-        if key in current_row['esource']:
+        if key in current_row['esource'] and value not in current_row['property']:
             current_row['property'].append(value)
     # see if there is any of *_openaccess flags set, if so set the generic openaccess flag
     if ('ADS_OPENACCESS' in current_row['property']) or ('AUTHOR_OPENACCESS' in current_row['property']) or \
