@@ -21,6 +21,5 @@ INSERT INTO public.datalinks VALUES ('2014MNRAS.444.1497S', 'ESOURCE', 'EPRINT_P
 INSERT INTO public.datalinks VALUES ('2014MNRAS.444.1497S', 'ESOURCE', 'PUB_PDF', '{}', '{}', '0');
 INSERT INTO public.datalinks VALUES ('1903BD....C......0A', 'DATA', 'CDS', '{}', '{}', '1');
 INSERT INTO public.datalinks VALUES ('1903BD....C......0A', 'DATA', 'Vizier', '{}', '{}', '1');
-INSERT INTO public.datalinks VALUES ('2018LPI....49.2177B', 'TOC', 'NA', '{}', '{}', '0');
 INSERT INTO public.datalinks VALUES ('2018LPI....49.2177B', 'ESOURCE', 'PUB_PDF', '{}', '{}', '0');
 

@@ -146,7 +146,7 @@ def add_data_link_extra_properties(current_row):
     else:
         current_row['property'].append(u'NOT REFEREED')
     # now augment the property field with many other boolean fields
-    extra_properties = ('pub_openaccess', 'toc', 'private', 'ocrabstract')
+    extra_properties = ('pub_openaccess', 'private', 'ocrabstract')
     for p in extra_properties:
         if current_row[p]:
             current_row['property'].append(p.upper())
