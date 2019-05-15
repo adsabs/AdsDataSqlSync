@@ -100,7 +100,7 @@ class test_resolver(unittest.TestCase):
     def test_property_query3(self):
         with db_con.cursor() as cur:
             cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='2018LPI....49.2177B'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ESOURCE'])
+            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ESOURCE', 'TOC'])
 
     def test_extra_property_values(self):
         current_row = {}
