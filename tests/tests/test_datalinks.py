@@ -104,12 +104,12 @@ class test_resolver(unittest.TestCase):
 
     def test_extra_property_values(self):
         current_row = {}
-        extra_properties = [{'pub_openaccess':True, 'toc':False, 'private':False, 'ocrabstract':False,
+        extra_properties = [{'pub_openaccess':True, 'private':False, 'ocrabstract':False,
                              'nonarticle':True, 'refereed':True},
-                            {'pub_openaccess':False, 'toc':True, 'private':True, 'ocrabstract':True,
+                            {'pub_openaccess':False, 'private':True, 'ocrabstract':True,
                              'nonarticle':False, 'refereed':False}]
         results = [['NONARTICLE', 'REFEREED', 'PUB_OPENACCESS', 'ADS_OPENACCESS', 'AUTHOR_OPENACCESS', 'EPRINT_OPENACCESS', 'OPENACCESS'],
-                   ['ARTICLE', 'NOT REFEREED', 'TOC', 'PRIVATE', 'OCRABSTRACT']]
+                   ['ARTICLE', 'NOT REFEREED', 'PRIVATE', 'OCRABSTRACT']]
         esources = [['ADS_PDF', 'AUTHOR_PDF', 'EPRINT_HTML'],
                    []]
         for extra_property, result, esource in zip(extra_properties, results, esources):
