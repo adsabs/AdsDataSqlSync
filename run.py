@@ -499,7 +499,7 @@ def main():
             for line in f:
                 bibcode = line.strip()
                 if bibcode:
-                    m.update_metrics_bibcode(bibcode, nonbib_db_enging)
+                    m.update_metrics_bibcode(bibcode, metrics_db_conn, nonbib_db_conn)
 
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics()
