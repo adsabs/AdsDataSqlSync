@@ -493,6 +493,14 @@ def main():
         m = metrics.Metrics(args.metricsSchemaName)
         m.drop_metrics_table(metrics_db_engine)
 
+    elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName and args.filename:
+        m = metrics.Metrics(args.metricsSchemaName)
+        with open(args.filename, 'r') as f:
+            for line in f:
+                bibcode = line.strip()
+                if bibcode:
+                    m.update_metrics_bibcode(bibcode, nonbib_db_enging)
+
     elif args.command == 'populateMetricsTable' and args.rowViewSchemaName and args.metricsSchemaName:
         m = metrics.Metrics()
         m.update_metrics_all(metrics_db_conn, nonbib_db_conn, args.rowViewSchemaName)
@@ -593,6 +601,16 @@ def main():
         nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
+    elif args.command == 'metricsToMasterPipeline' and args.filename:
+        bibcodes = []
+        with open(args.filename, 'r') as f:
+            for line in f:
+                bibcodes.append(line.strip())
+                if len(bibcodes) > 100:
+                    metrics_bibs_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, bibcodes)
+                    bibcodes = []
+        if len(bibcodes) > 0:
+            metrics_bibs_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, bibcodes)
     elif args.command == 'metricsToMasterPipeline' and args.bibcodes:
         bibcodes = args.bibcodes.split(',')
         metrics_bibs_to_master_pipeline(metrics_db_engine, args.metricsSchemaName, bibcodes)
