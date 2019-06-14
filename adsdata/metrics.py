@@ -140,11 +140,22 @@ class Metrics():
         self.flush(db_conn)
         # need to close?
 
-    def update_metrics_bibcode(self, bibcode, nonbib):  #, delta_schema='delta'):
+    def update_metrics_bibcode(self, bibcode, db_conn, nonbib_conn, row_view_schema='nonbib'):  #, delta_schema='delta'):
         """changed bibcodes are in sql table, for each we update metrics record"""
-        row = nonbib.get_by_bibcode(bibcode)
-        metrics_dict = self.row_view_to_metrics(row, sql_sync)
-        self.save(metrics_dict)
+	Metrics_Session = sessionmaker()
+        metrics_sess = Metrics_Session(bind=db_conn)
+        metrics_sess.execute('set search_path to {}'.format('metrics'))
+	sql_sync = nonbib.NonBib(row_view_schema)
+        row = sql_sync.get_by_bibcode(nonbib_conn, bibcode)
+        metrics_old = metrics_sess.query(models.MetricsTable).filter(models.MetricsTable.bibcode == bibcode).first()
+        metrics_new  = self.row_view_to_metrics(row, nonbib_conn, row_view_schema, metrics_old)
+	if metrics_old:	
+            metrics_sess.merge(metrics_new)
+        else:
+            metrics_sess.add(metrics_new)
+        metrics_sess.commit()
+	metrics_sess.close()
+        self.flush(db_conn)
 
 
     # paper from 1988: 1988PASP..100.1134B
