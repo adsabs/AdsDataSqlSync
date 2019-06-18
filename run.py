@@ -453,7 +453,8 @@ def main():
                         + ' | runRowViewPipeline | runMetricsPipeline | createNewBibcodes ' \
                         + ' | runRowViewPipelineDelta | runMetricsPipelineDelta '\
                         + ' | runPipelines | runPipelinesDelta | nonbibToMasterPipeline | nonbibDeltaToMasterPipeline'
-                        + ' | metricsToMasterPipeline | metricsDeltaToMasterPipeline | metricsCompare')
+                        + ' | metricsToMasterPipeline | metricsDeltaToMasterPipeline | metricsCompare'
+                        + ' | resetNonbib')
 
     args = parser.parse_args()
 
@@ -476,6 +477,15 @@ def main():
         diagnose_nonbib()
         diagnose_metrics()
 
+    elif args.command == 'resetNonbib':
+        # detect if pipeline didn't complete and reset postgres tables
+        if not nonbib_db_engine.has_table('rowviewm', schema='nonbib'):
+            print 'merged table not found, resetting database'
+            nonbib_db_engine.execute('drop schema if exists nonbib cascade')
+            nonbib_db_engine.execute('alter schema nonbibstaging rename to nonbib')
+            print 'reset complete'
+        else:
+            print 'merged output table found, reset not needed'
     elif args.command == 'createIngestTables':
         sql_sync.create_column_tables(nonbib_db_engine)
 
