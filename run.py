@@ -376,7 +376,7 @@ def metrics_bibs_to_master_pipeline(metrics_engine, metrics_schema, bibcodes):
         
     recs = MetricsRecordList()
     recs.metrics_records.extend(tmp)
-    logger.debug("Calling metrics 'app.forward_message' for '%s' bibcodes", str(rec))
+    logger.debug("Calling metrics 'app.forward_message' for '%s' bibcodes", str(recs))
     task_output_metrics.delay(recs)
         
     
