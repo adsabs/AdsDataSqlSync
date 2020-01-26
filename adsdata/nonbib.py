@@ -49,6 +49,8 @@ class NonBib:
             table = t()
             table.__table__.schema = self.schema
             table.__table__.create(db_engine)
+            sql = 'ALTER TABLE {}.{} SET UNLOGGED;'.format(self.schema, t.__tablename__)
+            db_engine.execute(sql)
 
         self.logger.info('row_view, created database column tables in schema {}'.format(self.schema))
         
