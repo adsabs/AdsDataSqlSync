@@ -470,7 +470,7 @@ def main():
 
     metrics_connection_string = config.get('METRICS_DATABASE',
                                    'postgresql://postgres@localhost:5432/postgres')
-    metrics_db_engine = create_engine(metrics_connection_string)
+    metrics_db_engine = create_engine(metrics_connection_string, pool_size=30)
     metrics_db_conn = metrics_db_engine.connect()
     sql_sync = nonbib.NonBib(args.rowViewSchemaName)
     if args.command == 'help' and args.diagnose:
