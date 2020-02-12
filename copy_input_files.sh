@@ -42,8 +42,7 @@ for FILE in bibcodes.list.can \
 		links/toc/all.links ; do
 
     mkdir -p $(dirname "$OUTPUT_BASE$FILE")
-    echo copying $FILE
-    cp $INPUT_BASE$FILE $OUTPUT_BASE$FILE
+    cp -v $INPUT_BASE$FILE $OUTPUT_BASE$FILE
     if [ $(wc -l < $OUTPUT_BASE$FILE) -lt ${MIN_LINES} ]; then
 	echo "ERROR: File $OUTPUT_BASE$FILE has less than ${MIN_LINES} lines, processing aborted"
 	exit 1
