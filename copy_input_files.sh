@@ -3,7 +3,7 @@ set -e
 INPUT_BASE=/proj/ads/abstracts/config/
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_BASE=./logs/input/input.$TIMESTAMP/
-MIN_LINES=8000
+MIN_LINES=2400
 
 # Delete old input files
 if [ -d ./logs/input ]; then
@@ -42,7 +42,7 @@ for FILE in bibcodes.list.can \
 		links/toc/all.links ; do
 
     mkdir -p $(dirname "$OUTPUT_BASE$FILE")
-    echo processing $FILE
+    echo copying $FILE
     cp $INPUT_BASE$FILE $OUTPUT_BASE$FILE
     if [ $(wc -l < $OUTPUT_BASE$FILE) -lt ${MIN_LINES} ]; then
 	echo "ERROR: File $OUTPUT_BASE$FILE has less than ${MIN_LINES} lines, processing aborted"
@@ -51,4 +51,4 @@ for FILE in bibcodes.list.can \
 done
 
 # ingest code expects latest files in directory named current
-ln -fs ./logs/input/$OUTPUT_BASE ./logs/input/current
+ln -fs $PWD/logs/input/$OUTPUT_BASE ./logs/input/current
