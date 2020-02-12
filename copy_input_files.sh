@@ -50,4 +50,4 @@ for FILE in bibcodes.list.can \
 done
 
 # ingest code expects latest files in directory named current
-ln -fs $PWD/logs/input/$OUTPUT_BASE ./logs/input/current
+ln -fsv $PWD/logs/input/$OUTPUT_BASE ./logs/input/current
