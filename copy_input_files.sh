@@ -40,7 +40,7 @@ FILES_INFO=(
 
 # Delete old input files
 if [ -d ./logs/input ]; then
-    find ./logs/input/ -name "input.20*-*-*_*-*-*" -type d -mtime +7 -exec rm -rf '{}' \;
+    find ./logs/input/ -name "input.20*-*-*_*-*-*" -type d -mtime +2 -exec rm -rf '{}' \;
 fi
 
 # create local copies of files
