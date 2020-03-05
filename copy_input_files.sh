@@ -9,15 +9,15 @@ FILES_INFO=(
     bibcodes.list.can:13000000
     links/facet_authors/all.links:13000000
     links/citation/all.links:110000000 
-    links/reads/downloads.links:13000000 
+    links/reads/downloads.links:10000000 
     links/grants/all.links:50000 
     links/ned/ned_objects.tab:4500000 
     links/nonarticle/all.links:1500000
     links/ocr/all.links:21000 
     links/private/all.links:56000 
     links/openaccess/pub.dat:900000 
-    links/alsoread_bib/all.links:7000000 
-    links/reads/all.links:12000000 
+    links/alsoread_bib/all.links:50000000
+    links/reads/all.links:10000000 
     links/refereed/all.links:9000000 
     links/reference/all.links:13000000 
     links/relevance/docmetrics.tab:7500000 
