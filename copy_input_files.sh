@@ -16,7 +16,7 @@ FILES_INFO=(
     links/ocr/all.links:21000 
     links/private/all.links:56000 
     links/openaccess/pub.dat:900000 
-    links/alsoread_bib/all.links:50000000
+    links/alsoread_bib/all.links:30000000
     links/reads/all.links:10000000 
     links/refereed/all.links:9000000 
     links/reference/all.links:13000000 
