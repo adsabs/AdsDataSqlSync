@@ -348,22 +348,18 @@ class NonBib:
         'insert into {0}.ChangedRowsM (bibcode) \
             select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
             on {0}.datalinks.bibcode = {1}.datalinks.bibcode \
-            and {0}.datalinks.link_type = {1}.datalinks.link_type \
-            and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
             where {0}.datalinks.url != {1}.datalinks.url \
-            or {0}.datalinks.title = {1}.datalinks.title \
-            or {0}.datalinks.item_count = {1}.datalinks.item_count \
+            or {0}.datalinks.title != {1}.datalinks.title \
+            or {0}.datalinks.item_count != {1}.datalinks.item_count \
             or {1}.datalinks.bibcode IS NULL;'
 
     populate_new_resolver_bibcodes_sql = \
         'insert into {0}.newbibcodes (bibcode) \
             select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
             on {0}.datalinks.bibcode = {1}.datalinks.bibcode \
-            and {0}.datalinks.link_type = {1}.datalinks.link_type \
-            and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
             where {0}.datalinks.url != {1}.datalinks.url \
-            or {0}.datalinks.title = {1}.datalinks.title \
-            or {0}.datalinks.item_count = {1}.datalinks.item_count \
+            or {0}.datalinks.title != {1}.datalinks.title \
+            or {0}.datalinks.item_count != {1}.datalinks.item_count \
             or {1}.datalinks.bibcode IS NULL;'
 
 
