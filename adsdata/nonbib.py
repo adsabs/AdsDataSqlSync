@@ -96,6 +96,10 @@ class NonBib:
         sql_command = NonBib.include_new_bibcodes_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
+        # resolver
+        sql_command = NonBib.include_update_resolver_bibcodes_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
         sess.close()
         self.logger.info('row_view, created delta/changed and new table in schema {}'.format(self.schema))
         
@@ -129,6 +133,10 @@ class NonBib:
         Session = sessionmaker()
         sess = Session(bind=db_conn)
         sql_command = NonBib.populate_new_bibcodes_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        # resolver
+        sql_command = NonBib.populate_new_resolver_bibcodes_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
@@ -335,6 +343,29 @@ class NonBib:
             on {0}.canonical.bibcode = {1}.canonical.bibcode \
             where {1}.canonical.bibcode IS NULL;'
 
+    # resolver
+    include_update_resolver_bibcodes_sql = \
+        'insert into {0}.ChangedRowsM (bibcode) \
+            select distinct on (bibcode) bibcode from \
+               (select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
+                on {0}.datalinks.bibcode = {1}.datalinks.bibcode \
+                and {0}.datalinks.link_type = {1}.datalinks.link_type \
+                and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
+                where {0}.datalinks.url != {1}.datalinks.url \
+                or {0}.datalinks.title != {1}.datalinks.title \
+                or {0}.datalinks.item_count != {1}.datalinks.item_count \
+                or {1}.datalinks.bibcode IS NULL) as datalinks \
+            where not exists (select \'x\' from {0}.ChangedRowsM where {0}.ChangedRowsM.bibcode = bibcode);'
+
+    populate_new_resolver_bibcodes_sql = \
+        'insert into {0}.newbibcodes (bibcode) \
+            select distinct on (bibcode) bibcode from \
+               (select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
+                on {0}.datalinks.bibcode = {1}.datalinks.bibcode \
+                and {0}.datalinks.link_type = {1}.datalinks.link_type \
+                and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
+                where {1}.datalinks.bibcode IS NULL) as datalinks \
+            where not exists (select \'x\' from {0}.newbibcodes where {0}.newbibcodes.bibcode = bibcode);'
 
 
 if __name__ == "__main__":
