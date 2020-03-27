@@ -19,11 +19,11 @@ Base = declarative_base()
 
 class NonBib:
     """manages 12 fields of nonbibliographic data
-    
-    Each nonbib data file is ingested from flat/column files to simple tables 
+
+    Each nonbib data file is ingested from flat/column files to simple tables
     using Postgres' efficient COPY tablename FROM PROGRAM.
     These tables are joined to create a unified row view of nonbib data.
-    
+
     We use Postgres schemas so we can use sql to compare one set of ingested data against another.
     """
 
@@ -41,7 +41,7 @@ class NonBib:
 
 
     def create_column_tables(self, db_engine):
-        """create tables to read nonbib files into 
+        """create tables to read nonbib files into
 
         note that this function does not create the joined row"""
         db_engine.execute(CreateSchema(self.schema))
@@ -53,7 +53,7 @@ class NonBib:
             db_engine.execute(sql)
 
         self.logger.info('row_view, created database column tables in schema {}'.format(self.schema))
-        
+
 
     def rename_schema(self, db_engine, new_name):
         db_engine.execute("alter schema {} rename to {}".format(self.schema, new_name))
@@ -77,7 +77,7 @@ class NonBib:
         sql_command = NonBib.create_view_sql.format(self.schema)
         sess.execute(sql_command)
         sess.commit()
-        
+
         sql_command = 'create index on {}.RowViewM (bibcode)'.format(self.schema)
         sess.execute(sql_command)
         sql_command = 'create index on {}.RowViewM (id)'.format(self.schema)
@@ -85,7 +85,7 @@ class NonBib:
         sess.commit()
         sess.close()
         self.logger.info('row_view, joined rows in schema {}'.format(self.schema))
-    
+
     def create_delta_rows(self, db_conn, baseline_schema):
         self.logger.info('row_view, creating delta/changed and new table in schema {}'.format(self.schema))
         Session = sessionmaker()
@@ -97,20 +97,20 @@ class NonBib:
         sess.execute(sql_command)
         sess.commit()
         # resolver
-        sql_command = NonBib.include_update_resolver_bibcodes_sql.format(self.schema, baseline_schema)
+        sql_command = NonBib.include_updated_resolver_bibcodes_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
         self.logger.info('row_view, created delta/changed and new table in schema {}'.format(self.schema))
-        
-        
+
+
     def get_delta_table(self, meta=None):
         """ delta table holds list of bibcodes that differ between two row views"""
         if meta is None:
             meta = self.meta
         return Table('changedrowsm', meta,
                      Column('bibcode', String, primary_key=True),
-                     schema=self.schema) 
+                     schema=self.schema)
 
     def get_new_bibcodes_table(self, meta=None):
         """ table holds list of bibcodes that are not in baseline"""
@@ -126,7 +126,7 @@ class NonBib:
         temp_meta = MetaData()
         table = self.get_new_bibcodes_table(temp_meta)
         temp_meta.create_all(self.engine)
-        
+
         self.logger.info('row_view, created new_bibcodes table in schema {}'.format(self.schema))
 
         self.logger.info('row_view, populating new_bibcodes table in schame {}'.format(self.schema))
@@ -143,7 +143,7 @@ class NonBib:
         self.logger.info('row_view, populated new_bibcodes table in schame {}'.format(self.schema))
 
 
-        
+
 
 
     def log_delta_reasons(self, db_conn, baseline_schema):
@@ -155,7 +155,7 @@ class NonBib:
         m = 'nonbib delta, total number of changed bibcodes: {}'.format(r.scalar())
         print m
         self.logger.info(m)
-        
+
         column_names = ('authors', 'refereed', 'simbad_objects', 'grants', 'citations',
                         'boost', 'citation_count', 'read_count', 'norm_cites',
                         'readers', 'downloads', 'reads', 'reference', 'ned_objects')
@@ -172,7 +172,7 @@ class NonBib:
             self.logger.info(m)
         sess.commit()
         sess.close()
-        
+
 
 
     def get_changed_rows_table(self, table_name, schema_name, meta=None):
@@ -215,7 +215,7 @@ class NonBib:
         """read unified nonbib data row for bibcode
 
         last argument is passed to sqlalchemy load_only
-        """ 
+        """
         Session = sessionmaker(bind=db_conn)
         session = Session()
         models.NonBibTable.__table__.schema = self.schema
@@ -225,7 +225,7 @@ class NonBib:
         first = q.first()
         session.close()
         return first
-    
+
     def read(self, db_conn, bibcode):
         """this function is used by utils where a standard name is required"""
         return self.get_by_bibcode(db_conn, bibcode)
@@ -264,7 +264,7 @@ class NonBib:
             return False
         return True
 
-        
+
 
     def count_lines(self, file):
         count = 0
@@ -305,7 +305,7 @@ class NonBib:
        natural left join {0}.Citation  natural left join {0}.Ned   \
        natural left join {0}.Relevance natural left join {0}.Reader \
        natural left join {0}.Download natural left join {0}.Reads   \
-       natural left join {0}.Reference;' 
+       natural left join {0}.Reference;'
 
     create_changed_sql = \
         'create table {0}.ChangedRowsM as \
@@ -344,7 +344,7 @@ class NonBib:
             where {1}.canonical.bibcode IS NULL;'
 
     # resolver
-    include_update_resolver_bibcodes_sql = \
+    include_updated_resolver_bibcodes_sql = \
         'insert into {0}.ChangedRowsM (bibcode) \
             select distinct on (bibcode) bibcode from \
                (select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
@@ -355,7 +355,7 @@ class NonBib:
                 or {0}.datalinks.title != {1}.datalinks.title \
                 or {0}.datalinks.item_count != {1}.datalinks.item_count \
                 or {1}.datalinks.bibcode IS NULL) as datalinks \
-            where not exists (select \'x\' from {0}.ChangedRowsM where {0}.ChangedRowsM.bibcode = bibcode);'
+            where not exists (select \'x\' from {0}.ChangedRowsM where {0}.ChangedRowsM.bibcode = datalinks.bibcode);'
 
     populate_new_resolver_bibcodes_sql = \
         'insert into {0}.newbibcodes (bibcode) \
@@ -365,7 +365,7 @@ class NonBib:
                 and {0}.datalinks.link_type = {1}.datalinks.link_type \
                 and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
                 where {1}.datalinks.bibcode IS NULL) as datalinks \
-            where not exists (select \'x\' from {0}.newbibcodes where {0}.newbibcodes.bibcode = bibcode);'
+            where not exists (select \'x\' from {0}.newbibcodes where {0}.newbibcodes.bibcode = datalinks.bibcode);'
 
 
 if __name__ == "__main__":
@@ -401,5 +401,5 @@ if __name__ == "__main__":
                     print count
         print 'count = ', count
 
-                
-        
+
+
