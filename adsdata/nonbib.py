@@ -97,7 +97,10 @@ class NonBib:
         sess.execute(sql_command)
         sess.commit()
         # resolver
-        sql_command = NonBib.include_updated_resolver_bibcodes_sql.format(self.schema, baseline_schema)
+        sql_command = NonBib.include_updated_datalinks_bibcodes_sql.format(self.schema, baseline_schema)
+        sess.execute(sql_command)
+        sess.commit()
+        sql_command = NonBib.include_deleted_datalinks_bibcodes_sql.format(self.schema, baseline_schema)
         sess.execute(sql_command)
         sess.commit()
         sess.close()
@@ -344,7 +347,7 @@ class NonBib:
             where {1}.canonical.bibcode IS NULL;'
 
     # resolver
-    include_updated_resolver_bibcodes_sql = \
+    include_updated_datalinks_bibcodes_sql = \
         'insert into {0}.ChangedRowsM (bibcode, id) \
             select distinct on (bibcode) datalinks.bibcode, {0}.canonical.id from \
                (select {0}.datalinks.bibcode from {0}.datalinks left join {1}.datalinks \
@@ -355,6 +358,20 @@ class NonBib:
                 or {0}.datalinks.title != {1}.datalinks.title \
                 or {0}.datalinks.item_count != {1}.datalinks.item_count \
                 or {1}.datalinks.bibcode IS NULL) as datalinks \
+            left join {0}.canonical \
+            on datalinks.bibcode = {0}.canonical.bibcode \
+            where \
+                {0}.canonical.bibcode IS NOT NULL \
+                and not exists (select \'x\' from {0}.ChangedRowsM where {0}.ChangedRowsM.bibcode = datalinks.bibcode);'
+
+    include_deleted_datalinks_bibcodes_sql = \
+        'insert into {0}.ChangedRowsM (bibcode, id) \
+            select distinct on (bibcode) datalinks.bibcode, {0}.canonical.id from \
+               (select {1}.datalinks.bibcode from {0}.datalinks right join {1}.datalinks \
+                on {0}.datalinks.bibcode = {1}.datalinks.bibcode \
+                and {0}.datalinks.link_type = {1}.datalinks.link_type \
+                and {0}.datalinks.link_sub_type = {1}.datalinks.link_sub_type \
+                where {0}.datalinks.bibcode IS NULL) as datalinks \
             left join {0}.canonical \
             on datalinks.bibcode = {0}.canonical.bibcode \
             where \
