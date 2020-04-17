@@ -1,5 +1,10 @@
 from adsdata import reader
 
+PROPERTY_QUERY = "select string_agg(distinct link_type, ',') as property from {db}.datalinks where bibcode = '{bibcode}'"
+ESOURCE_QUERY = "select string_agg(link_sub_type, ',') as eSource from {db}.datalinks where link_type = 'ESOURCE' and bibcode = '{bibcode}'"
+DATA_QUERY = "select sum(item_count), string_agg(link_sub_type || ':' || item_count::text, ',') as data from {db}.datalinks where link_type = 'DATA' and bibcode = '{bibcode}'"
+DATALINKS_QUERY = "select link_type, link_sub_type, url, title, item_count from {db}.datalinks where bibcode = '{bibcode}'"
+
 def load_column_files_datalinks_table(config, table_name, file_type, raw_conn, cur):
     # config['DATALINKS'] is a list of lines that could have one the following two formats
     # path,link_type,link_sub_type (i.e., config/links/eprint_html/all.links,ARTICLE,EPRINT_HTML) or
@@ -26,10 +31,6 @@ def load_column_files_datalinks_table(config, table_name, file_type, raw_conn, c
 
 def add_data_links(session, data):
     """populate property, esource, data, total_link_counts, and data_links_rows fields"""
-    PROPERTY_QUERY = "select string_agg(distinct link_type, ',') as property from {db}.datalinks where bibcode = '{bibcode}'"
-    ESOURCE_QUERY = "select string_agg(link_sub_type, ',') as eSource from {db}.datalinks where link_type = 'ESOURCE' and bibcode = '{bibcode}'"
-    DATA_QUERY = "select sum(item_count), string_agg(link_sub_type || ':' || item_count::text, ',') as data from {db}.datalinks where link_type = 'DATA' and bibcode = '{bibcode}'"
-    DATALINKS_QUERY = "select link_type, link_sub_type, url, title, item_count from {db}.datalinks where bibcode = '{bibcode}'"
 
     q = PROPERTY_QUERY.format(db='nonbib', bibcode=data['bibcode'])
     result = session.execute(q)
