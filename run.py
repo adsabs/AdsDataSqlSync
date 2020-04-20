@@ -67,7 +67,7 @@ def row2dict(row):
     return d
 
 
-def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source=models.NonBibTable):
+def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source="models.NonBibTable"):
     """
     Transform and send nonbib data to master pipeline.
     - If source is models.NonBibTable, all the data is sent.
@@ -75,7 +75,7 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source=models.N
     """
     global config
 
-    if source is not models.NonBibDeltaTable and source is not models.NonBibTable and not isinstance(source, (list, tuple)):
+    if source != "models.NonBibDeltaTable" and source != "models.NonBibTable" and not isinstance(source, (list, tuple)):
         raise Exception("Invalid source, it should be models.NonBibTable, models.NonBibDeltaTable, or a list of bibcodes")
 
     if isinstance(source, (list, tuple)):
@@ -83,10 +83,11 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source=models.N
         num_rows = len(bibcodes)
     else:
         bibcodes = None
+        model = eval(source)
         Session = sessionmaker(bind=nonbib_engine)
         session = Session()
         session.execute('set search_path to {}'.format(schema))
-        num_rows = session.query(source).count()
+        num_rows = session.query(model).count()
         session.close()
 
     num_rows = num_rows if config['MAX_ROWS'] <= 0 else min((num_rows, max_rows))
@@ -97,8 +98,6 @@ def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source=models.N
         else:
             logger.debug("Calling 'task_transform_results' with source '%s' (from '%i' to '%i' out of '%i')", source, offset, offset+batch_size, num_rows)
             tasks.task_transform_results.delay(schema, source=source, offset=offset, limit=min(num_rows-offset, batch_size))
-        if offset > 200:
-            break
 
 def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
     """send all metrics data to queue for delivery to master pipeline"""
@@ -417,9 +416,9 @@ def main():
                 bibcodes.append(line.strip())
         nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=bibcodes)
     elif args.command == 'nonbibToMasterPipeline':
-        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=models.NonBibTable)
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source="models.NonBibTable")
     elif args.command == 'nonbibDeltaToMasterPipeline':
-        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=models.NonBibDeltaTable)
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source="models.NonBibDeltaTable")
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
     elif args.command == 'metricsToMasterPipeline' and args.filename:
