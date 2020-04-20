@@ -9,8 +9,8 @@ import unittest
 import psycopg2
 import testing.postgresql
 
-from adsputils import load_config
-from run import fetch_data_link_elements, fetch_data_link_elements_counts, fetch_data_link_record, add_data_link_extra_properties
+from adsdata.datalinks import _fetch_data_link_elements, _fetch_data_link_elements_counts, _fetch_data_link_record, _add_data_link_extra_properties
+from adsdata.datalinks import PROPERTY_QUERY, ESOURCE_QUERY, DATA_QUERY, DATALINKS_QUERY
 
 class test_resolver(unittest.TestCase):
     """tests for generation of resolver"""
@@ -25,9 +25,6 @@ class test_resolver(unittest.TestCase):
 
     # Map of database connection parameters passed to the functions we're testing
     db_conf = None
-
-    config = {}
-    config.update(load_config())
 
     def setUp(self):
         """ Module level set-up called once before any tests in this file are
@@ -64,43 +61,43 @@ class test_resolver(unittest.TestCase):
 
     def test_data_query(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['DATA_QUERY'].format(db='public', bibcode='1903BD....C......0A'))
-            self.assertEqual(fetch_data_link_elements_counts(cur.fetchone()), [['CDS:1', 'Vizier:1'], 2])
+            cur.execute(DATA_QUERY.format(db='public', bibcode='1903BD....C......0A'))
+            self.assertEqual(_fetch_data_link_elements_counts(cur.fetchone()), [['CDS:1', 'Vizier:1'], 2])
 
 
     def test_esource_query1(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['ESOURCE_QUERY'].format(db='public', bibcode='2016Atoms...4...18I'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['EPRINT_HTML', 'EPRINT_PDF'])
+            cur.execute(ESOURCE_QUERY.format(db='public', bibcode='2016Atoms...4...18I'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['EPRINT_HTML', 'EPRINT_PDF'])
 
 
     def test_esource_query2(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['ESOURCE_QUERY'].format(db='public', bibcode='2014MNRAS.444.1496E'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['PUB_PDF'])
+            cur.execute(ESOURCE_QUERY.format(db='public', bibcode='2014MNRAS.444.1496E'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['PUB_PDF'])
 
 
     def test_esource_query3(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['ESOURCE_QUERY'].format(db='public', bibcode='2014MNRAS.444.1497S'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['EPRINT_HTML', 'EPRINT_PDF', 'PUB_PDF'])
+            cur.execute(ESOURCE_QUERY.format(db='public', bibcode='2014MNRAS.444.1497S'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['EPRINT_HTML', 'EPRINT_PDF', 'PUB_PDF'])
 
 
     def test_property_query1(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ASSOCIATED', 'ESOURCE', 'INSPIRE'])
+            cur.execute(PROPERTY_QUERY.format(db='public', bibcode='2004MNRAS.354L..31M'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['ASSOCIATED', 'ESOURCE', 'INSPIRE'])
 
 
     def test_property_query2(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='1891opvl.book.....N'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
+            cur.execute(PROPERTY_QUERY.format(db='public', bibcode='1891opvl.book.....N'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['LIBRARYCATALOG'])
 
     def test_property_query3(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['PROPERTY_QUERY'].format(db='public', bibcode='2018LPI....49.2177B'))
-            self.assertEqual(fetch_data_link_elements(cur.fetchone()), ['ESOURCE', 'TOC'])
+            cur.execute(PROPERTY_QUERY.format(db='public', bibcode='2018LPI....49.2177B'))
+            self.assertEqual(_fetch_data_link_elements(cur.fetchone()), ['ESOURCE', 'TOC'])
 
     def test_extra_property_values(self):
         current_row = {}
@@ -117,13 +114,13 @@ class test_resolver(unittest.TestCase):
             for key, value in extra_property.iteritems():
                 current_row[key] = value
             current_row['esource'] = esource
-            current_row = add_data_link_extra_properties(current_row)
+            current_row = _add_data_link_extra_properties(current_row)
             self.assertEqual(current_row['property'], result)
 
     def test_datalinks_query(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['DATALINKS_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            rec = fetch_data_link_record(cur.fetchall())
+            cur.execute(DATALINKS_QUERY.format(db='public', bibcode='2004MNRAS.354L..31M'))
+            rec = _fetch_data_link_record(cur.fetchall())
             expected = [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'],
                          'title': [], 'item_count': 0, 'link_type': 'ESOURCE',
                          'link_sub_type': 'ADS_PDF'},
@@ -136,8 +133,8 @@ class test_resolver(unittest.TestCase):
 
     def test_datalinks_query_for_associated(self):
         with db_con.cursor() as cur:
-            cur.execute(self.config['DATALINKS_QUERY'].format(db='public', bibcode='2004MNRAS.354L..31M'))
-            self.assertEqual(fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [], 'item_count': 0, 'link_type': 'ESOURCE', 'link_sub_type': 'ADS_PDF'},
+            cur.execute(DATALINKS_QUERY.format(db='public', bibcode='2004MNRAS.354L..31M'))
+            self.assertEqual(_fetch_data_link_record(cur.fetchall()), [{'url': ['http://articles.adsabs.harvard.edu/pdf/1825AN......4..241B'], 'title': [], 'item_count': 0, 'link_type': 'ESOURCE', 'link_sub_type': 'ADS_PDF'},
                                                                       {'url': ['1825AN......4..241B', '2010AN....331..852K'], 'title': ['Main Paper', 'Translation'], 'item_count': 0, 'link_type': 'ASSOCIATED', 'link_sub_type': 'NA'},
                                                                       {'url': [], 'title': [], 'item_count': 0, 'link_type': 'INSPIRE', 'link_sub_type': 'NA'}])
 

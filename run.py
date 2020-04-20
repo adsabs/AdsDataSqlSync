@@ -13,7 +13,8 @@ from adsdata import reader
 from adsdata import models
 from adsputils import load_config, setup_logging
 from adsmsg import NonBibRecord, NonBibRecordList, MetricsRecord, MetricsRecordList
-from adsdata.tasks import task_output_results, task_output_metrics
+from adsdata import tasks
+from adsdata import datalinks
 
 logger = None
 config = {}
@@ -29,18 +30,18 @@ nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
-    
-    after data has been loaded, join to create a unified row view 
+
+    after data has been loaded, join to create a unified row view
     """
     raw_conn = nonbib_db_engine.raw_connection()
     cur = raw_conn.cursor()
-    
+
     for t in nonbib.NonBib.all_types:
         table_name = sql_sync.schema + '.' + t
         logger.info('processing {}'.format(table_name))
         # here we have to read multiple files, information in config file are in a list
         if t == 'datalinks':
-            load_column_files_datalinks_table(config[t.upper()], table_name, t, raw_conn, cur)
+            datalinks.load_column_files_datalinks_table(config, table_name, t, raw_conn, cur)
         else:
             filename = config['DATA_PATH'] + config[t.upper()]
             if t == 'canonical':
@@ -58,42 +59,6 @@ def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     sql_sync.create_joined_rows(nonbib_db_conn)
 
 
-def load_column_files_datalinks_table(from_config, table_name, file_type, raw_conn, cur):
-
-    # from_config is a list of lines that could have one the following two formats
-    # path,link_type,link_sub_type (i.e., config/links/eprint_html/all.links,ARTICLE,EPRINT_HTML) or
-    # path,link_type (i.e., config/links/video/all.links,PRESENTATION)
-    for oneLinkType in from_config:
-        if (oneLinkType.count(',') == 1):
-            [filename, linktype] = oneLinkType.split(',')
-            linksubtype = 'NA'
-        elif (oneLinkType.count(',') == 2):
-            [filename, linktype, linksubtype] = oneLinkType.split(',')
-        else:
-            return
-
-        if linktype == 'ASSOCIATED':
-            r = reader.DataLinksWithTitleFileReader(file_type, config['DATA_PATH'] + filename, linktype)
-        elif linktype == 'DATA':
-            r = reader.DataLinksWithTargetFileReader(file_type, config['DATA_PATH'] + filename, linktype)
-        else:
-            r = reader.DataLinksFileReader(file_type, config['DATA_PATH'] + filename, linktype, linksubtype)
-
-        if r:
-            cur.copy_from(r, table_name)
-            raw_conn.commit()
-
-
-def nonbib_to_master_dict(row):
-    """create dict using only nonbib fields sent to master in protobuf"""
-    d = {}
-    for column in nonbib_to_master_select_fields:
-        d[column] = getattr(row, column)
-    author_count = len(getattr(row, 'authors', ()))
-    d['citation_count_norm'] = getattr(row, 'citation_count', 0) / float(max(author_count, 1))
-    return d
-
-
 def row2dict(row):
     """ from https://stackoverflow.com/questions/1958219/convert-sqlalchemy-row-object-to-python-dict"""
     d = {}
@@ -102,188 +67,38 @@ def row2dict(row):
     return d
 
 
-def fetch_data_link_elements(query_result):
-    elements = []
-    if (query_result[0] != None):
-        for e in query_result[0].split(','):
-            if (e != None):
-                elements.append(e)
-    return elements
-
-
-def fetch_data_link_elements_counts(query_result):
-    elements = []
-    cumulative_count = 0
-    if (query_result[1] != None):
-        for e in query_result[1].split(','):
-            if (e != None):
-                elements.append(e)
-        cumulative_count = query_result[0]
-    return [elements, cumulative_count]
-
-
-def fetch_data_link_record(query_result):
-    # since I want to use this function from the test side,
-    # I was not able to use the elegant function row2dict function
-    # convert query results to a list of dicts 
-    columns = ['link_type', 'link_sub_type', 'url', 'title', 'item_count']
-    results = []
-    for row in query_result:
-        d = {}
-        for i, field in enumerate(row):
-            d[columns[i]] = field
-        results.append(d)
-    return results
-
-def add_data_link_extra_properties(current_row):
-    # first, augment property field with article/nonartile, refereed/not refereed
-    if current_row['nonarticle']:
-        current_row['property'].append(u'NONARTICLE')
-    else:
-        current_row['property'].append(u'ARTICLE')
-    if current_row['refereed']:
-        current_row['property'].append(u'REFEREED')
-    else:
-        current_row['property'].append(u'NOT REFEREED')
-    # now augment the property field with many other boolean fields
-    extra_properties = ('pub_openaccess', 'private', 'ocrabstract')
-    for p in extra_properties:
-        if current_row[p]:
-            current_row['property'].append(p.upper())
-    # these property fields are set from availability of url
-    extra_properties_link_type = {'ADS_PDF':'ADS_OPENACCESS', 'ADS_SCAN':'ADS_OPENACCESS',
-                                  'AUTHOR_PDF':'AUTHOR_OPENACCESS', 'AUTHOR_HTML':'AUTHOR_OPENACCESS',
-                                  'EPRINT_PDF':'EPRINT_OPENACCESS', 'EPRINT_HTML':'EPRINT_OPENACCESS'}
-    for key,value in extra_properties_link_type.iteritems():
-        if key in current_row['esource'] and value not in current_row['property']:
-            current_row['property'].append(value)
-    # see if there is any of *_openaccess flags set, if so set the generic openaccess flag
-    if ('ADS_OPENACCESS' in current_row['property']) or ('AUTHOR_OPENACCESS' in current_row['property']) or \
-       ('EPRINT_OPENACCESS' in current_row['property']) or ('PUB_OPENACCESS' in current_row['property']):
-       current_row['property'].append('OPENACCESS')
-    return current_row
-
-def add_data_link(session, current_row):
-    """populate property, esource, data, total_link_counts, and data_links_rows fields"""
-
-    q = config['PROPERTY_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
-    result = session.execute(q)
-    current_row['property'] = fetch_data_link_elements(result.fetchone())
-
-    q = config['ESOURCE_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
-    result = session.execute(q)
-    current_row['esource'] = fetch_data_link_elements(result.fetchone())
-
-    current_row = add_data_link_extra_properties(current_row)
-
-    q = config['DATA_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
-    result = session.execute(q)
-    current_row['data'],current_row['total_link_counts'] = fetch_data_link_elements_counts(result.fetchone())
-
-    q = config['DATALINKS_QUERY'].format(db='nonbib', bibcode=current_row['bibcode'])
-    result = session.execute(q)
-    current_row['data_links_rows'] = fetch_data_link_record(result.fetchall())
-
-
-def cleanup_for_master(r):
-    """delete values from dict not needed by protobuf to master pipeline"""
-    for f in nonbib_to_master_property_fields:
-        r.pop(f, None)
-
-
-def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size=1):
-    """send all nonbib data to queue for delivery to master pipeline"""
+def nonbib_to_master_pipeline(nonbib_engine, schema, batch_size, source=models.NonBibTable):
+    """
+    Transform and send nonbib data to master pipeline.
+    - If source is models.NonBibTable, all the data is sent.
+    - If source is models.NonBibDeltaTable, only the delta is sent.
+    """
     global config
-    Session = sessionmaker(bind=nonbib_engine)
-    session = Session()
-    session.execute('set search_path to {}'.format(schema))
-    tmp = []
-    i = 0
-    max_rows = config['MAX_ROWS']
-    q = session.query(models.NonBibTable).options(load_only(*nonbib_to_master_select_fields))
-    for current_row in q.yield_per(100):
-        current_row = nonbib_to_master_dict(current_row)
-        add_data_link(session, current_row)
-        cleanup_for_master(current_row)
-        rec = NonBibRecord(**current_row)
-        tmp.append(rec._data)
-        i += 1
-        if max_rows > 0 and i >= max_rows:
-            break
-        if len(tmp) >= batch_size:
-            recs = NonBibRecordList()
-            recs.nonbib_records.extend(tmp)
-            tmp = []
-            logger.info("Calling 'app.forward_message' count = '%s'", i)
-            task_output_results.delay(recs)
 
-    if len(tmp) > 0:
-        recs = NonBibRecordList()
-        recs.nonbib_records.extend(tmp)
-        logger.info("Calling 'app.forward_message' with count = '%s'", i)
-        task_output_results.delay(recs)
-    session.close()
+    if source is not models.NonBibDeltaTable and source is not models.NonBibTable and not isinstance(source, (list, tuple)):
+        raise Exception("Invalid source, it should be models.NonBibTable, models.NonBibDeltaTable, or a list of bibcodes")
 
+    if isinstance(source, (list, tuple)):
+        bibcodes = source
+        num_rows = len(bibcodes)
+    else:
+        bibcodes = None
+        Session = sessionmaker(bind=nonbib_engine)
+        session = Session()
+        session.execute('set search_path to {}'.format(schema))
+        num_rows = session.query(source).count()
+        session.close()
 
-def nonbib_delta_to_master_pipeline(nonbib_engine, schema, batch_size=1):
-    """send data for changed bibcodes to master pipeline
-
-    the delta table was computed by comparing to sets of nonbib data
-    perhaps ingested on succesive days"""
-    global config
-    Session = sessionmaker(bind=nonbib_engine)
-    session = Session()
-    session.execute('set search_path to {}'.format(schema))
-    tmp = []
-    i = 0
-    n = nonbib.NonBib(schema)
-    max_rows = config['MAX_ROWS']
-    for current_delta in session.query(models.NonBibDeltaTable).yield_per(100):
-        row = n.get_by_bibcode(nonbib_engine, current_delta.bibcode, nonbib_to_master_select_fields)
-        row = nonbib_to_master_dict(row)
-        add_data_link(session, row)
-        cleanup_for_master(row)
-        rec = NonBibRecord(**row)
-        tmp.append(rec._data)
-        i += 1
-        if max_rows > 0 and i > max_rows:
-            break
-        if len(tmp) >= batch_size:
-            recs = NonBibRecordList()
-            recs.nonbib_records.extend(tmp)
-            tmp = []
-            logger.debug("Calling 'app.forward_message' with '%s' items", len(recs.nonbib_records))
-            task_output_results.delay(recs)
-
-    if len(tmp) > 0:
-        recs = NonBibRecordList()
-        recs.nonbib_records.extend(tmp)
-        logger.debug("Calling 'app.forward_message' with final '%s' items", len(recs.nonbib_records))
-        task_output_results.delay(recs)
-
-
-def nonbib_bibs_to_master_pipeline(nonbib_engine, schema, bibcodes):
-    """send data for the passed bibcodes to master"""
-    Session = sessionmaker(bind=nonbib_engine)
-    session = Session()
-    session.execute('set search_path to {}'.format(schema))
-    n = nonbib.NonBib(schema)
-    tmp = [] 
-    for bibcode in bibcodes:
-        row = n.get_by_bibcode(nonbib_engine, bibcode, nonbib_to_master_select_fields)
-        if row:
-            row = nonbib_to_master_dict(row)
-            add_data_link(session, row)
-            cleanup_for_master(row)
-            rec = NonBibRecord(**row)
-            tmp.append(rec._data)
+    num_rows = num_rows if config['MAX_ROWS'] <= 0 else min((num_rows, max_rows))
+    for offset in range(0, num_rows, batch_size):
+        if bibcodes:
+            logger.debug("Calling 'task_transform_results' with list of bibcodes (from '%i' to '%i' out of '%i')", offset, offset+batch_size, num_rows)
+            tasks.task_transform_results.delay(schema, source=bibcodes[offset:min(offset+batch_size, num_rows)], offset=offset, limit=batch_size)
         else:
-            print 'unknown bibcode ', bibcode
-    recs = NonBibRecordList()
-    recs.nonbib_records.extend(tmp)
-    logger.debug("Calling 'app.forward_message' for '%s' bibcodes", len(recs.nonbib_records))
-    task_output_results.delay(recs)
-
+            logger.debug("Calling 'task_transform_results' with source '%s' (from '%i' to '%i' out of '%i')", source, offset, offset+batch_size, num_rows)
+            tasks.task_transform_results.delay(schema, source=source, offset=offset, limit=min(num_rows-offset, batch_size))
+        if offset > 200:
+            break
 
 def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
     """send all metrics data to queue for delivery to master pipeline"""
@@ -306,14 +121,14 @@ def metrics_to_master_pipeline(metrics_engine, schema, batch_size=1):
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
             logger.info("Calling metrics 'app.forward_message' count = '%s'", i)
-            task_output_metrics.delay(recs)
+            tasks.task_output_metrics.delay(recs)
             tmp = []
 
     if len(tmp) > 0:
         recs = MetricsRecordList()
         recs.metrics_records.extend(tmp)
         logger.debug("Calling metrics 'app.forward_message' with count = '%s'", i)
-        task_output_metrics.delay(recs)
+        tasks.task_output_metrics.delay(recs)
 
 
 def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engine, nonbib_schema,  batch_size=1):
@@ -348,14 +163,14 @@ def metrics_delta_to_master_pipeline(metrics_engine, metrics_schema, nonbib_engi
             recs = MetricsRecordList()
             recs.metrics_records.extend(tmp)
             logger.debug("Calling metrics 'app.forward_message' with '%s' messages", len(recs.metrics_records))
-            task_output_metrics.delay(recs)
+            tasks.task_output_metrics.delay(recs)
             tmp = []
 
     if len(tmp) > 0:
         recs = MetricsRecordList()
         recs.metrics_records.extend(tmp)
         logger.debug("Calling metrics 'app.forward_message' with final '%s'", str(rec))
-        task_output_metrics.delay(recs)
+        tasks.task_output_metrics.delay(recs)
 
 def metrics_bibs_to_master_pipeline(metrics_engine, metrics_schema, bibcodes):
     """send the passed list of bibcodes to master"""
@@ -373,13 +188,13 @@ def metrics_bibs_to_master_pipeline(metrics_engine, metrics_schema, bibcodes):
             tmp.append(rec._data)
         else:
             print 'unknown bibcode: ', bibcode
-        
+
     recs = MetricsRecordList()
     recs.metrics_records.extend(tmp)
     logger.debug("Calling metrics 'app.forward_message' for '%s' bibcodes", str(recs))
-    task_output_metrics.delay(recs)
-        
-    
+    tasks.task_output_metrics.delay(recs)
+
+
 
 
 
@@ -403,7 +218,7 @@ def diagnose_nonbib():
     print '  OUTPUT_TASKNAME', config['OUTPUT_TASKNAME']
     print 'this action did not use ingest database (configured at', config['INGEST_DATABASE'], ')'
     print '  or the metrics database (at', config['METRICS_DATABASE'], ')'
-    task_output_results.delay(recs)
+    tasks.task_output_results.delay(recs)
 
 
 def diagnose_metrics():
@@ -411,12 +226,12 @@ def diagnose_metrics():
 
     useful for testing to verify connectivity"""
 
-    test_data = {'bibcode': '2003ASPC..295..361M', 'refereed':False, 'rn_citations': 0, 
-                 'rn_citation_data': [], 
+    test_data = {'bibcode': '2003ASPC..295..361M', 'refereed':False, 'rn_citations': 0,
+                 'rn_citation_data': [],
                  'downloads': [0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,1,0,0,0,1,2],
-                 'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5], 
+                 'reads': [0,0,0,0,0,0,0,0,1,0,4,2,5,1,0,0,1,0,0,2,4,5],
                  'an_citations': 0, 'refereed_citation_num': 0,
-                 'citation_num': 0, 'reference_num': 0, 'citations': [], 'refereed_citations': [], 
+                 'citation_num': 0, 'reference_num': 0, 'citations': [], 'refereed_citations': [],
                  'author_num': 2, 'an_refereed_citations': 0
                  }
     recs = MetricsRecordList()
@@ -430,17 +245,17 @@ def diagnose_metrics():
     print '  OUTPUT_TASKNAME', config['OUTPUT_TASKNAME']
     print 'this action did not use ingest database (configured at', config['INGEST_DATABASE'], ')'
     print '  or the metrics database (at', config['METRICS_DATABASE'], ')'
-    task_output_metrics.delay(recs)
+    tasks.task_output_metrics.delay(recs)
 
 
 
-    
+
 def main():
     parser = argparse.ArgumentParser(description='process column files into Postgres')
-    parser.add_argument('-t', '--rowViewBaselineSchemaName', default='nonbibstaging', 
+    parser.add_argument('-t', '--rowViewBaselineSchemaName', default='nonbibstaging',
                         help='name of old postgres schema, used to compute delta')
     parser.add_argument('-d', '--diagnose', default=False, action='store_true', help='run simple test')
-    parser.add_argument('-f', '--filename', default='bibcodes.txt', help='name of file containing the list of bibcode for metrics comparison')
+    parser.add_argument('-f', '--filename', default=None, help='name of file containing the list of bibcode for metrics comparison')
     parser.add_argument('-m', '--metricsSchemaName', default='metrics', help='name of the postgres metrics schema')
     parser.add_argument('-n', '--metricsSchemaName2', default='', help='name of the postgres metrics schema for comparison')
     parser.add_argument('-r', '--rowViewSchemaName', default='nonbib', help='name of the postgres row view schema')
@@ -594,21 +409,17 @@ def main():
         diagnose_nonbib()
     elif args.command == 'nonbibToMasterPipeline' and args.bibcodes:
         bibcodes = args.bibcodes.split(',')
-        nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=bibcodes)
     elif args.command == 'nonbibToMasterPipeline' and args.filename:
         bibcodes = []
         with open(args.filename, 'r') as f:
             for line in f:
                 bibcodes.append(line.strip())
-                if len(bibcodes) > 100:
-                    nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
-                    bibcodes = []
-        if len(bibcodes) > 0:
-            nonbib_bibs_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, bibcodes)
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=bibcodes)
     elif args.command == 'nonbibToMasterPipeline':
-        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=models.NonBibTable)
     elif args.command == 'nonbibDeltaToMasterPipeline':
-        nonbib_delta_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize))
+        nonbib_to_master_pipeline(nonbib_db_engine, args.rowViewSchemaName, int(args.batchSize), source=models.NonBibDeltaTable)
     elif args.command == 'metricsToMasterPipeline' and args.diagnose:
         diagnose_metrics()
     elif args.command == 'metricsToMasterPipeline' and args.filename:
