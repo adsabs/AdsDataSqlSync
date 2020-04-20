@@ -36,7 +36,7 @@ nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub
                                     'refereed', '_sa_instance_state')
 
 @app.task(queue='transform-results')
-def task_transform_results(schema, source=models.NonBibDeltaTable, offset=0, limit=100):
+def task_transform_results(schema, source="models.NonBibDeltaTable", offset=0, limit=100):
     """
     Transform records from the database to protobuf to be sent to master pipeline.
 
@@ -47,14 +47,14 @@ def task_transform_results(schema, source=models.NonBibDeltaTable, offset=0, lim
     - a list of bibcodes (offset and limit parameters are ignored)
     """
 
-    if source is not models.NonBibDeltaTable and source is not models.NonBibTable and not isinstance(source, (list, tuple)):
+    if source != "models.NonBibDeltaTable" and source != "models.NonBibTable" and not isinstance(source, (list, tuple)):
         raise Exception("Invalid source, it should be models.NonBibTable, models.NonBibDeltaTable, or a list of bibcodes")
     elif isinstance(source, (list, tuple)):
         bibcodes = source
         model = None
     else:
         bibcodes = None
-        model = source
+        model = eval(source)
 
     with app.session_scope() as session:
         session.execute('set search_path to {}'.format(schema))
