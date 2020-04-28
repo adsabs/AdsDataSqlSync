@@ -29,11 +29,11 @@ app.conf.CELERY_QUEUES = (
 nonbib_to_master_select_fields = ('bibcode', 'boost', 'citation_count',
                                   'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
                                   'private', 'pub_openaccess', 'read_count', 'readers', 'reference',
-                                  'refereed', 'simbad_objects')
+                                  'refereed', 'simbad_objects', 'authors')
 
 # select fields that are not sent to master, they are used to compute solr property field
 nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub_openaccess',
-                                    'refereed', '_sa_instance_state')
+                                    'refereed', '_sa_instance_state', 'authors')
 
 @app.task(queue='transform-results')
 def task_transform_results(schema, source="models.NonBibDeltaTable", offset=0, limit=100):
