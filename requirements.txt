@@ -1,7 +1,3 @@
-git+https://github.com/adsabs/ADSPipelineUtils.git@v1.2.0
+adsputils==v1.2.4
 alembic==0.9.1
-cachetools==1.1.5
-librabbitmq==1.6.1
-psycopg2==2.7.1
-python-Levenshtein==0.12.0
-requests==2.13.0
+psycopg2==2.8.3

@@ -12,7 +12,6 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from collections import defaultdict
 from datetime import datetime
 
-from adsputils import load_config, setup_logging
 
 Base = declarative_base()
 
@@ -54,7 +53,7 @@ class CanonicalTable(Base):
 class AuthorTable(Base):
     __tablename__ = 'author'
     bibcode = Column(String, primary_key=True)
-    authors = Column(ARRAY(String)) 
+    authors = Column(ARRAY(String))
 
 
 class RefereedTable(Base):
@@ -87,28 +86,28 @@ class SimbadTable(Base):
     __tablename__ = 'simbad'
     bibcode = Column(String, primary_key=True)
     simbad_objects = Column(ARRAY(String))
-                     
+
 
 class NedTable(Base):
     __tablename__ = 'ned'
     bibcode = Column(String, primary_key=True)
     ned_objects = Column(ARRAY(String))
-                     
+
 
 class GrantsTable(Base):
     __tablename__ = 'grants'
     bibcode = Column(String, primary_key=True)
     grants = Column(ARRAY(String))
-                     
+
 
 class CitationTable(Base):
     __tablename__ = 'citation'
     bibcode = Column(String, primary_key=True)
     citations = Column(ARRAY(String))
-                     
+
 
 class RelevanceTable(Base):
-    __tablename__ = 'relevance' 
+    __tablename__ = 'relevance'
     bibcode = Column(String, primary_key=True)
     boost = Column(Float)
     citation_count = Column(Integer)
@@ -120,25 +119,25 @@ class ReaderTable(Base):
     __tablename__ = 'reader'
     bibcode = Column(String, primary_key=True)
     readers = Column(ARRAY(String))
-                     
+
 
 class ReadsTable(Base):
     __tablename__ = 'reads'
     bibcode = Column(String, primary_key=True)
     reads = Column(ARRAY(Integer))
-                     
-                     
+
+
 class DownloadTable(Base):
     __tablename__ = 'download'
     bibcode = Column(String, primary_key=True)
     downloads = Column(ARRAY(Integer))
-                     
+
 
 class ReferenceTable(Base):
     __tablename__ = 'reference'
     bibcode = Column(String, primary_key=True)
     reference = Column(ARRAY(String))
-    
+
 class ChangedTable(Base):
     __tablename__ = 'changedrows'
     bibcode = Column(String, primary_key=True)

@@ -11,7 +11,7 @@ from adsdata import datalinks
 # ============================= INITIALIZATION ==================================== #
 
 proj_home = os.path.realpath(os.path.join(os.path.dirname(__file__), '../'))
-app = app_module.AdsDataCelery('ads-data', proj_home=proj_home)
+app = app_module.AdsDataCelery('ads-data', proj_home=proj_home, local_config=globals().get('local_config', {}))
 logger = app.logger
 
 

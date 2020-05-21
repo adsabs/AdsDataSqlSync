@@ -10,37 +10,45 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy import create_engine
 from collections import defaultdict
 from datetime import datetime
+import os
 import time
 import sys
 import json
 import argparse
 
-from adsputils import load_config, setup_logging
+from adsputils import setup_logging, load_config
 import nonbib
 import models
 
+# ============================= INITIALIZATION ==================================== #
 
 Base = declarative_base()
 meta = MetaData()
-metrics_logger = None
 
+# ================================ CLASSES ======================================== #
 
 class Metrics():
     """computes and provides interface for metrics data"""
 
     def __init__(self, schema_='metrics'):
-        self.logger = setup_logging('AdsDataSqlSync', 'INFO')
+        # - Use app logger:
+        #import logging
+        #logger = logging.getLogger('ads-data')
+        # - Or individual logger for this file:
+        proj_home = os.path.realpath(os.path.join(os.path.dirname(__file__), '../'))
+        self.config = load_config(proj_home=proj_home)
+        self.logger = setup_logging(__name__, proj_home=proj_home,
+                                level=self.config.get('LOGGING_LEVEL', 'INFO'),
+                                attach_stdout=self.config.get('LOG_STDOUT', False))
 
         self.schema =  schema_
         self.table = models.MetricsTable()
         self.table.schema = self.schema
 
-        # used to buffer writes                                                                                         
+        # used to buffer writes
         self.upserts = []
         self.tmp_update_buffer = []
         self.tmp_count = 0
-        self.config = {}
-        self.config.update(load_config())
 
 
     def create_metrics_table(self, db_engine):
@@ -109,7 +117,7 @@ class Metrics():
         return results
 
 
-    def update_metrics_changed(self, db_conn, nonbib_conn, row_view_schema='ingest'):  
+    def update_metrics_changed(self, db_conn, nonbib_conn, row_view_schema='ingest'):
         """changed bibcodes are in sql table, for each we update metrics record"""
         Nonbib_Session = sessionmaker(bind=nonbib_conn)
         nonbib_sess = Nonbib_Session()
@@ -118,7 +126,7 @@ class Metrics():
         Metrics_Session = sessionmaker()
         metrics_sess = Metrics_Session(bind=db_conn)
         metrics_sess.execute('set search_path to {}'.format('metrics'))
-        
+
         sql_sync = nonbib.NonBib(row_view_schema)
         query = nonbib_sess.query(models.NonBibTable)
         count = 0
@@ -149,7 +157,7 @@ class Metrics():
         row = sql_sync.get_by_bibcode(nonbib_conn, bibcode)
         metrics_old = metrics_sess.query(models.MetricsTable).filter(models.MetricsTable.bibcode == bibcode).first()
         metrics_new  = self.row_view_to_metrics(row, nonbib_conn, row_view_schema, metrics_old)
-	if metrics_old:	
+	if metrics_old:
             metrics_sess.merge(metrics_new)
         else:
             metrics_sess.add(metrics_new)
@@ -221,7 +229,7 @@ class Metrics():
     def row_view_to_metrics(self, passed_row_view, nonbib_db_conn, row_view_schema='nonbib', m=None):
         """convert the passed row view into a complete metrics dictionary"""
         if m is None:
-            m = models.MetricsTable()            
+            m = models.MetricsTable()
         # first do easy fields
         bibcode = passed_row_view.bibcode
         m.bibcode = bibcode

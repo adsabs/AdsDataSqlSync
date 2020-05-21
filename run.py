@@ -11,13 +11,19 @@ from adsdata import nonbib
 from adsdata import metrics
 from adsdata import reader
 from adsdata import models
-from adsputils import load_config, setup_logging
 from adsmsg import NonBibRecord, NonBibRecordList, MetricsRecord, MetricsRecordList
 from adsdata import tasks
 from adsdata import datalinks
 
-logger = None
-config = {}
+# ============================= INITIALIZATION ==================================== #
+
+from adsputils import setup_logging, load_config
+proj_home = os.path.realpath(os.path.dirname(__file__))
+config = load_config(proj_home=proj_home)
+logger = setup_logging('run.py', proj_home=proj_home,
+                        level=config.get('LOGGING_LEVEL', 'INFO'),
+                        attach_stdout=config.get('LOG_STDOUT', False))
+
 # fields needed from nonbib to compute master record
 nonbib_to_master_select_fields = ('bibcode', 'boost', 'citation_count',
                                   'grants', 'ned_objects', 'nonarticle', 'norm_cites', 'ocrabstract',
@@ -27,6 +33,8 @@ nonbib_to_master_select_fields = ('bibcode', 'boost', 'citation_count',
 # select fields that are not sent to master, they are used to compute solr property field
 nonbib_to_master_property_fields = ('nonarticle', 'ocrabstract', 'private', 'pub_openaccess',
                                     'refereed')
+
+# =============================== FUNCTIONS ======================================= #
 
 def load_column_files(config, nonbib_db_engine, nonbib_db_conn, sql_sync):
     """ use psycopg.copy_from to data from column file to postgres
@@ -272,10 +280,6 @@ def main():
 
     args = parser.parse_args()
 
-    config.update(load_config())
-
-    global logger
-    logger = setup_logging('AdsDataSqlSync', config.get('LOG_LEVEL', 'INFO'))
     logger.info('starting AdsDataSqlSync.app with {}'.format(args.command))
     nonbib_connection_string = config.get('INGEST_DATABASE',
                                    'postgresql://postgres@localhost:5432/postgres')

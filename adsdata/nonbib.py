@@ -8,13 +8,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import select
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.schema import CreateSchema, DropSchema
+import os
 import sys
 import argparse
 
 from adsputils import load_config, setup_logging
 import models
 
+# ============================= INITIALIZATION ==================================== #
+
 Base = declarative_base()
+
+# ================================ CLASSES ======================================== #
 
 
 class NonBib:
@@ -37,7 +42,15 @@ class NonBib:
         self.meta = MetaData()
         self.table = models.NonBibTable()
         self.table.schema = self.schema
-        self.logger = setup_logging('AdsDataSqlSync', 'INFO')
+        # - Use app logger:
+        #import logging
+        #logger = logging.getLogger('ads-data')
+        # - Or individual logger for this file:
+        proj_home = os.path.realpath(os.path.join(os.path.dirname(__file__), '../'))
+        config = load_config(proj_home=proj_home)
+        self.logger = setup_logging(__name__, proj_home=proj_home,
+                                level=config.get('LOGGING_LEVEL', 'INFO'),
+                                attach_stdout=config.get('LOG_STDOUT', False))
 
 
     def create_column_tables(self, db_engine):
