@@ -62,6 +62,7 @@ CELERYD_TASK_SOFT_TIME_LIMIT = 60
 CELERY_DEFAULT_EXCHANGE = 'ads-data'
 CELERY_DEFAULT_EXCHANGE_TYPE = "topic"
 
+CELERY_INCLUDE = ['adsdata.tasks']
 CELERY_BROKER = 'pyamqp://guest:guest@localhost:5682/data_pipeline'
 OUTPUT_CELERY_BROKER = 'pyamqp://guest:guest@localhost:5682/master_pipeline'
 OUTPUT_TASKNAME = 'adsmp.tasks.task_update_record'

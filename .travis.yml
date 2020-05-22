@@ -7,11 +7,15 @@ python:
 
 services:
   - redis-server
+  - postgresql
+
+addons:
+  postgresql: "9.6"
 
 install:
   - pip install --upgrade setuptools
-  - "pip install -r requirements.txt"
-  - "pip install -r dev-requirements.txt"
+  - pip install -r requirements.txt
+  - pip install -r dev-requirements.txt
 
 script:
   - "py.test"
